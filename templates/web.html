@@ -2271,89 +2271,6 @@
             font-size: 13px;
         }
 
-        .bible-picks-list {
-            display: grid;
-            gap: 10px;
-        }
-
-        .bible-pick {
-            border: 1px solid var(--glass-border);
-            border-radius: 14px;
-            padding: 12px;
-            background: var(--surface);
-            cursor: pointer;
-            transition: transform 0.2s ease, border-color 0.2s ease;
-        }
-
-        .bible-pick:hover {
-            transform: translateY(-1px);
-            border-color: var(--primary);
-        }
-
-        .bible-pick-ref {
-            font-weight: 800;
-            font-size: 14px;
-            margin-bottom: 6px;
-        }
-
-        .bible-pick-title {
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--primary);
-            margin-bottom: 6px;
-        }
-
-        .bible-pick-reason {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-        }
-
-        .bible-pick-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .bible-pick-copy {
-            padding: 6px 10px;
-            border-radius: 999px;
-            border: 1px solid var(--glass-border);
-            background: transparent;
-            color: var(--text-secondary);
-            font-size: 11px;
-            cursor: pointer;
-        }
-
-        .bible-pick-detail {
-            overflow: hidden;
-            max-height: 0;
-            opacity: 0;
-            transform: translateY(-6px);
-            transition: max-height 0.35s ease, opacity 0.25s ease, transform 0.25s ease;
-            border: 1px solid var(--glass-border);
-            border-radius: 14px;
-            padding: 0 12px;
-            background: rgba(0,0,0,0.2);
-            margin-top: 8px;
-        }
-
-        .bible-pick-detail.active {
-            max-height: 140px;
-            opacity: 1;
-            transform: translateY(0);
-            padding: 12px;
-        }
-
-        .bible-pick-detail-title {
-            font-weight: 800;
-            margin-bottom: 6px;
-        }
-
-        .bible-pick-detail-meta {
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-
         .bible-reader-card {
             margin-top: 16px;
             padding: 16px;
@@ -2917,7 +2834,21 @@
                             <option value="">Select a popular reading...</option>
                         </select>
                     </div>
-                    <div class="bible-pick-detail" id="biblePickDetail" aria-live="polite"></div>
+                    <div class="bible-reader-card">
+                        <div class="bible-reader-header">
+                            <div class="bible-reader-title">📘 Ebook Reader</div>
+                            <div class="bible-reader-current" id="readerCurrentChapter">Chapter: —</div>
+                        </div>
+                        <div class="bible-reader-controls">
+                            <select class="bible-reader-select" id="readerBookSelect"></select>
+                            <input class="bible-reader-input" id="readerChapterInput" type="number" min="1" value="1">
+                            <button class="bible-reader-btn" type="button" onclick="loadBibleChapter()">Load</button>
+                            <button class="bible-reader-btn secondary" type="button" onclick="prevBibleChapter()">Prev</button>
+                            <button class="bible-reader-btn secondary" type="button" onclick="nextBibleChapter()">Next</button>
+                        </div>
+                        <div class="bible-reader-meta" id="readerMeta">Select a book and chapter to begin reading.</div>
+                        <div class="bible-reader-content" id="readerContent">Waiting for selection.</div>
+                    </div>
                 </div>
 
                 <!-- Quick Filters -->
@@ -2985,21 +2916,6 @@
                     <div id="verseOfDayRef" style="margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--primary);"></div>
                 </div>
 
-                <div class="glass-card bible-reader-card">
-                    <div class="bible-reader-header">
-                        <div class="bible-reader-title">📘 Bible Reader</div>
-                        <div class="bible-reader-current" id="readerCurrentChapter">Chapter: —</div>
-                    </div>
-                    <div class="bible-reader-controls">
-                        <select class="bible-reader-select" id="readerBookSelect"></select>
-                        <input class="bible-reader-input" id="readerChapterInput" type="number" min="1" value="1">
-                        <button class="bible-reader-btn" type="button" onclick="loadBibleChapter()">Load</button>
-                        <button class="bible-reader-btn secondary" type="button" onclick="prevBibleChapter()">Prev</button>
-                        <button class="bible-reader-btn secondary" type="button" onclick="nextBibleChapter()">Next</button>
-                    </div>
-                    <div class="bible-reader-meta" id="readerMeta">Select a book and chapter to begin reading.</div>
-                    <div class="bible-reader-content" id="readerContent">Waiting for selection.</div>
-                </div>
             </div>
 
             <!-- RECOMMENDATIONS TAB -->
@@ -5265,14 +5181,8 @@
         async function loadBiblePicks(popularOnly = false) {
             const selectEl = document.getElementById('biblePickSelect');
             const metaEl = document.getElementById('biblePickMeta');
-            const detailEl = document.getElementById('biblePickDetail');
             const queryEl = document.getElementById('biblePickQuery');
             if (!selectEl || !metaEl) return;
-
-            if (detailEl) {
-                detailEl.classList.remove('active');
-                detailEl.innerHTML = '';
-            }
 
             let topic = '';
             if (!popularOnly && queryEl) {
@@ -5307,7 +5217,6 @@
 
         function renderBiblePicks(picks) {
             const selectEl = document.getElementById('biblePickSelect');
-            const detailEl = document.getElementById('biblePickDetail');
             if (!selectEl) return;
 
             biblePickState.picks = Array.isArray(picks) ? picks : [];
@@ -5323,46 +5232,18 @@
                 opt.textContent = label;
                 selectEl.appendChild(opt);
             });
-
-            if (detailEl) {
-                detailEl.classList.remove('active');
-                detailEl.innerHTML = '';
-            }
         }
 
         function onBiblePickSelect() {
             const selectEl = document.getElementById('biblePickSelect');
-            const detailEl = document.getElementById('biblePickDetail');
             if (!selectEl) return;
             const idx = parseInt(selectEl.value, 10);
             if (!Number.isFinite(idx) || !biblePickState.picks[idx]) {
-                if (detailEl) detailEl.classList.remove('active');
                 return;
             }
 
             const pick = biblePickState.picks[idx];
-            showBiblePickDetail(pick);
             applyPickToReader(pick);
-        }
-
-        function showBiblePickDetail(pick) {
-            const detailEl = document.getElementById('biblePickDetail');
-            if (!detailEl) return;
-            const ref = (pick.reference || pick.ref || '').trim();
-            const title = (pick.title || '').trim();
-            const reason = (pick.reason || '').trim();
-            const refEncoded = encodeURIComponent(ref);
-
-            detailEl.innerHTML = `
-                <div class="bible-pick-detail-title">${escapeHtml(ref || 'Selection')}</div>
-                ${title ? `<div class="bible-pick-title">${escapeHtml(title)}</div>` : ''}
-                ${reason ? `<div class="bible-pick-detail-meta">${escapeHtml(reason)}</div>` : ''}
-                <div class="bible-pick-actions">
-                    <button class="bible-pick-copy" type="button" onclick="copyBiblePick('${refEncoded}')">Copy</button>
-                </div>
-            `;
-            detailEl.classList.add('active');
-            detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
         function parsePickReference(ref) {
@@ -5383,6 +5264,7 @@
 
             const selectEl = document.getElementById('readerBookSelect');
             const chapterEl = document.getElementById('readerChapterInput');
+            const metaEl = document.getElementById('readerMeta');
             if (chapterEl) {
                 chapterEl.value = String(parsed.chapter || 1);
             }
@@ -5413,16 +5295,9 @@
             }
 
             loadBibleChapter();
+            if (metaEl) metaEl.textContent = `Selected: ${ref}`;
         }
 
-        function copyBiblePick(encodedRef) {
-            const ref = decodeURIComponent(encodedRef || '');
-            if (!ref) return;
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(ref).catch(() => {});
-            }
-            showToast(`Copied: ${ref}`);
-        }
 
         async function loadBibleBooks() {
             const selectEl = document.getElementById('readerBookSelect');
