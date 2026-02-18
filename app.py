@@ -1274,22 +1274,22 @@ def generate_smart_recommendation(self, user_id, exclude_ids=None):
                 return random.choice(options)
             try:
                 return {
-                        "id": row['id'], 
-                        "ref": row['reference'], 
-                        "text": row['text'],
-                        "trans": row['translation'], 
-                        "book": row['book'],
-                        "reason": pick_reason(row['book'], bool(preferred_books))
-                    }
-                except (TypeError, KeyError):
-                    return {
-                        "id": row[0], 
-                        "ref": row[1], 
-                        "text": row[2],
-                        "trans": row[3], 
-                        "book": row[6],
-                        "reason": pick_reason(row[6], bool(preferred_books))
-                    }
+                    "id": row['id'], 
+                    "ref": row['reference'], 
+                    "text": row['text'],
+                    "trans": row['translation'], 
+                    "book": row['book'],
+                    "reason": pick_reason(row['book'], bool(preferred_books))
+                }
+            except (TypeError, KeyError):
+                return {
+                    "id": row[0], 
+                    "ref": row[1], 
+                    "text": row[2],
+                    "trans": row[3], 
+                    "book": row[6],
+                    "reason": pick_reason(row[6], bool(preferred_books))
+                }
         return None
     except Exception as e:
         logger.error(f"Recommendation error: {e}")
