@@ -2823,9 +2823,7 @@
                     <div class="bible-picks-header">
                         <div class="bible-picks-title">📖 Popular Bible Selections</div>
                         <div class="bible-picks-controls">
-                            <input class="bible-picks-input" id="biblePickQuery" placeholder="Search a theme (hope, faith, prayer)">
-                            <button class="bible-picks-btn" type="button" onclick="loadBiblePicks()">Find</button>
-                            <button class="bible-picks-btn secondary" type="button" onclick="loadBiblePicks(true)">Popular</button>
+                            <button class="bible-picks-btn secondary" type="button" onclick="loadBiblePicks(true)">Refresh</button>
                         </div>
                     </div>
                     <div class="bible-picks-meta" id="biblePickMeta">OpenAI suggests popular Bible chapters and short ranges.</div>
@@ -5181,23 +5179,12 @@
         async function loadBiblePicks(popularOnly = false) {
             const selectEl = document.getElementById('biblePickSelect');
             const metaEl = document.getElementById('biblePickMeta');
-            const queryEl = document.getElementById('biblePickQuery');
             if (!selectEl || !metaEl) return;
 
-            let topic = '';
-            if (!popularOnly && queryEl) {
-                topic = (queryEl.value || '').trim();
-            }
-            if (!popularOnly && topic.length < 2) {
-                topic = '';
-            }
-
-            metaEl.textContent = popularOnly || !topic
-                ? 'OpenAI is picking popular Bible selections...'
-                : 'OpenAI is finding popular selections for your theme...';
+            metaEl.textContent = 'OpenAI is picking popular Bible selections...';
 
             try {
-                const url = topic ? `/api/bible/picks?topic=${encodeURIComponent(topic)}` : '/api/bible/picks';
+                const url = '/api/bible/picks';
                 const res = await fetch(url);
                 const data = await res.json();
                 if (!res.ok || data.error) {
