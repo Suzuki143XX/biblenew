@@ -2196,6 +2196,148 @@
             transition: width 0.5s ease;
         }
 
+        .bible-picks-card {
+            margin: 14px 0 16px;
+            padding: 16px;
+        }
+
+        .bible-picks-header {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .bible-picks-title {
+            font-size: 14px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--primary);
+        }
+
+        .bible-picks-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .bible-picks-input {
+            flex: 1;
+            min-width: 180px;
+            background: var(--surface);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            color: var(--text);
+            padding: 10px 12px;
+            font-size: 13px;
+        }
+
+        .bible-picks-btn {
+            padding: 9px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--glass-border);
+            background: var(--primary);
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .bible-picks-btn.secondary {
+            background: var(--surface);
+            color: var(--text);
+        }
+
+        .bible-picks-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .bible-picks-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .bible-pick {
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 12px;
+            background: var(--surface);
+            cursor: pointer;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .bible-pick:hover {
+            transform: translateY(-1px);
+            border-color: var(--primary);
+        }
+
+        .bible-pick-ref {
+            font-weight: 800;
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+
+        .bible-pick-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 6px;
+        }
+
+        .bible-pick-reason {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .bible-pick-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .bible-pick-copy {
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--glass-border);
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .bible-pick-detail {
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(-6px);
+            transition: max-height 0.35s ease, opacity 0.25s ease, transform 0.25s ease;
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 0 12px;
+            background: rgba(0,0,0,0.2);
+            margin-top: 8px;
+        }
+
+        .bible-pick-detail.active {
+            max-height: 220px;
+            opacity: 1;
+            transform: translateY(0);
+            padding: 12px;
+        }
+
+        .bible-pick-detail-title {
+            font-weight: 800;
+            margin-bottom: 6px;
+        }
+
+        .bible-pick-detail-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
         .quick-filters {
             display: flex;
             gap: 8px;
@@ -2643,6 +2785,20 @@
                     <div style="text-align: right; font-size: 12px; margin-top: 6px; opacity: 0.8;">
                         <span id="challengeProgress">0</span>/<span id="challengeGoal">2</span>
                     </div>
+                </div>
+
+                <div class="glass-card bible-picks-card">
+                    <div class="bible-picks-header">
+                        <div class="bible-picks-title">📖 Popular Bible Selections</div>
+                        <div class="bible-picks-controls">
+                            <input class="bible-picks-input" id="biblePickQuery" placeholder="Search a theme (hope, faith, prayer)">
+                            <button class="bible-picks-btn" type="button" onclick="loadBiblePicks()">Find</button>
+                            <button class="bible-picks-btn secondary" type="button" onclick="loadBiblePicks(true)">Popular</button>
+                        </div>
+                    </div>
+                    <div class="bible-picks-meta" id="biblePickMeta">OpenAI suggests popular Bible chapters and short ranges.</div>
+                    <div class="bible-picks-list" id="biblePickList"></div>
+                    <div class="bible-pick-detail" id="biblePickDetail" aria-live="polite"></div>
                 </div>
 
                 <!-- Quick Filters -->
@@ -3538,6 +3694,7 @@
             
             // Initialize new features
             initDailyChallenge();
+            loadBiblePicks(true);
             loadVerseOfDay();
             renderRecHistory();
             updateOnlineUsers();
@@ -4965,6 +5122,99 @@
             } catch (_) {
                 // Keep UI stable if endpoint temporarily fails.
             }
+        }
+
+        async function loadBiblePicks(popularOnly = false) {
+            const listEl = document.getElementById('biblePickList');
+            const metaEl = document.getElementById('biblePickMeta');
+            const queryEl = document.getElementById('biblePickQuery');
+            if (!listEl || !metaEl) return;
+
+            let topic = '';
+            if (!popularOnly && queryEl) {
+                topic = (queryEl.value || '').trim();
+            }
+            if (!popularOnly && topic.length < 2) {
+                topic = '';
+            }
+
+            metaEl.textContent = popularOnly || !topic
+                ? 'OpenAI is picking popular Bible selections...'
+                : 'OpenAI is finding popular selections for your theme...';
+
+            try {
+                const url = topic ? `/api/bible/picks?topic=${encodeURIComponent(topic)}` : '/api/bible/picks';
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    metaEl.textContent = 'Unable to load selections.';
+                    return;
+                }
+
+                const picks = Array.isArray(data.picks) ? data.picks : [];
+                renderBiblePicks(picks);
+                metaEl.textContent = picks.length
+                    ? `${picks.length} popular selections ready.`
+                    : 'No selections found.';
+            } catch (_) {
+                metaEl.textContent = 'Network error while loading selections.';
+            }
+        }
+
+        function renderBiblePicks(picks) {
+            const listEl = document.getElementById('biblePickList');
+            const detailEl = document.getElementById('biblePickDetail');
+            if (!listEl) return;
+            if (!Array.isArray(picks) || !picks.length) {
+                listEl.innerHTML = '<div style="opacity: 0.6;">No selections yet.</div>';
+                if (detailEl) detailEl.classList.remove('active');
+                return;
+            }
+
+            listEl.innerHTML = picks.map(p => {
+                const ref = (p.reference || p.ref || '').trim();
+                const title = (p.title || '').trim();
+                const reason = (p.reason || '').trim();
+                const refAttr = encodeURIComponent(ref);
+                const titleAttr = encodeURIComponent(title);
+                const reasonAttr = encodeURIComponent(reason);
+                return `
+                    <div class="bible-pick" data-ref="${refAttr}" data-title="${titleAttr}" data-reason="${reasonAttr}" onclick="selectBiblePick(this)">
+                        <div class="bible-pick-ref">${escapeHtml(ref)}</div>
+                        ${title ? `<div class="bible-pick-title">${escapeHtml(title)}</div>` : ''}
+                        ${reason ? `<div class="bible-pick-reason">${escapeHtml(reason)}</div>` : ''}
+                        <div class="bible-pick-actions">
+                            <button class="bible-pick-copy" type="button" onclick="copyBiblePick('${refAttr}'); event.stopPropagation();">Copy</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectBiblePick(el) {
+            if (!el) return;
+            const detailEl = document.getElementById('biblePickDetail');
+            if (!detailEl) return;
+            const ref = decodeURIComponent(el.dataset.ref || '');
+            const title = decodeURIComponent(el.dataset.title || '');
+            const reason = decodeURIComponent(el.dataset.reason || '');
+
+            detailEl.innerHTML = `
+                <div class="bible-pick-detail-title">${escapeHtml(ref || 'Selection')}</div>
+                ${title ? `<div class="bible-pick-title">${escapeHtml(title)}</div>` : ''}
+                ${reason ? `<div class="bible-pick-detail-meta">${escapeHtml(reason)}</div>` : ''}
+            `;
+            detailEl.classList.add('active');
+            detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function copyBiblePick(encodedRef) {
+            const ref = decodeURIComponent(encodedRef || '');
+            if (!ref) return;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(ref).catch(() => {});
+            }
+            showToast(`Copied: ${ref}`);
         }
 
         // Quick Filters for Discover
