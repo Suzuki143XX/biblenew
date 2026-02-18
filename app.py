@@ -11,6 +11,7 @@ import random
 import logging
 from datetime import datetime, timedelta
 from functools import wraps
+from urllib.parse import quote
 
 # Load environment variables from .env file (for local development)
 try:
@@ -39,6 +40,8 @@ GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', 'GOCSPX-nYiAlDyBri
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
 OPENAI_API_URL = os.environ.get('OPENAI_API_URL', 'https://api.openai.com/v1/chat/completions')
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4.1')
+BIBLE_API_BASE = "https://bible-api.com"
+DEFAULT_TRANSLATION = os.environ.get('BIBLE_API_TRANSLATION', 'web').lower()
 
 # Role-based codes
 ROLE_CODES = {
@@ -59,6 +62,75 @@ if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
 IS_POSTGRES = DATABASE_URL and ('postgresql' in DATABASE_URL or 'postgres' in DATABASE_URL)
 BOOK_TEXT_CACHE = {}
 BOOK_META_CACHE = {}
+
+FALLBACK_BOOKS = [
+    {"id": "GEN", "name": "Genesis"},
+    {"id": "EXO", "name": "Exodus"},
+    {"id": "LEV", "name": "Leviticus"},
+    {"id": "NUM", "name": "Numbers"},
+    {"id": "DEU", "name": "Deuteronomy"},
+    {"id": "JOS", "name": "Joshua"},
+    {"id": "JDG", "name": "Judges"},
+    {"id": "RUT", "name": "Ruth"},
+    {"id": "1SA", "name": "1 Samuel"},
+    {"id": "2SA", "name": "2 Samuel"},
+    {"id": "1KI", "name": "1 Kings"},
+    {"id": "2KI", "name": "2 Kings"},
+    {"id": "1CH", "name": "1 Chronicles"},
+    {"id": "2CH", "name": "2 Chronicles"},
+    {"id": "EZR", "name": "Ezra"},
+    {"id": "NEH", "name": "Nehemiah"},
+    {"id": "EST", "name": "Esther"},
+    {"id": "JOB", "name": "Job"},
+    {"id": "PSA", "name": "Psalms"},
+    {"id": "PRO", "name": "Proverbs"},
+    {"id": "ECC", "name": "Ecclesiastes"},
+    {"id": "SNG", "name": "Song of Solomon"},
+    {"id": "ISA", "name": "Isaiah"},
+    {"id": "JER", "name": "Jeremiah"},
+    {"id": "LAM", "name": "Lamentations"},
+    {"id": "EZK", "name": "Ezekiel"},
+    {"id": "DAN", "name": "Daniel"},
+    {"id": "HOS", "name": "Hosea"},
+    {"id": "JOL", "name": "Joel"},
+    {"id": "AMO", "name": "Amos"},
+    {"id": "OBA", "name": "Obadiah"},
+    {"id": "JON", "name": "Jonah"},
+    {"id": "MIC", "name": "Micah"},
+    {"id": "NAM", "name": "Nahum"},
+    {"id": "HAB", "name": "Habakkuk"},
+    {"id": "ZEP", "name": "Zephaniah"},
+    {"id": "HAG", "name": "Haggai"},
+    {"id": "ZEC", "name": "Zechariah"},
+    {"id": "MAL", "name": "Malachi"},
+    {"id": "MAT", "name": "Matthew"},
+    {"id": "MRK", "name": "Mark"},
+    {"id": "LUK", "name": "Luke"},
+    {"id": "JHN", "name": "John"},
+    {"id": "ACT", "name": "Acts"},
+    {"id": "ROM", "name": "Romans"},
+    {"id": "1CO", "name": "1 Corinthians"},
+    {"id": "2CO", "name": "2 Corinthians"},
+    {"id": "GAL", "name": "Galatians"},
+    {"id": "EPH", "name": "Ephesians"},
+    {"id": "PHP", "name": "Philippians"},
+    {"id": "COL", "name": "Colossians"},
+    {"id": "1TH", "name": "1 Thessalonians"},
+    {"id": "2TH", "name": "2 Thessalonians"},
+    {"id": "1TI", "name": "1 Timothy"},
+    {"id": "2TI", "name": "2 Timothy"},
+    {"id": "TIT", "name": "Titus"},
+    {"id": "PHM", "name": "Philemon"},
+    {"id": "HEB", "name": "Hebrews"},
+    {"id": "JAS", "name": "James"},
+    {"id": "1PE", "name": "1 Peter"},
+    {"id": "2PE", "name": "2 Peter"},
+    {"id": "1JN", "name": "1 John"},
+    {"id": "2JN", "name": "2 John"},
+    {"id": "3JN", "name": "3 John"},
+    {"id": "JUD", "name": "Jude"},
+    {"id": "REV", "name": "Revelation"},
+]
 
 def get_db():
     """Get database connection - PostgreSQL for Render, SQLite for local"""
@@ -1570,6 +1642,53 @@ def get_current():
         }
     return jsonify(payload)
 
+@app.route('/api/bible/books')
+def bible_books():
+    if 'user_id' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    translation = (request.args.get('translation') or DEFAULT_TRANSLATION).lower()
+    data = _fetch_json(f"{BIBLE_API_BASE}/data/{translation}")
+    if data and isinstance(data, dict) and "books" in data:
+        return jsonify({
+            "translation": data.get("translation", translation),
+            "translation_id": data.get("translation_id", translation),
+            "books": data.get("books", [])
+        })
+    if data and isinstance(data, list):
+        return jsonify(data)
+    return jsonify({
+        "translation": "Fallback",
+        "translation_id": translation,
+        "books": FALLBACK_BOOKS
+    })
+
+@app.route('/api/bible/chapter')
+def bible_chapter():
+    if 'user_id' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    translation = (request.args.get('translation') or DEFAULT_TRANSLATION).lower()
+    book = (request.args.get('book') or 'John').strip()
+    chapter = (request.args.get('chapter') or '1').strip()
+
+    if not chapter.isdigit():
+        return jsonify({"error": "chapter must be a number"}), 400
+
+    query = f"{book} {chapter}"
+    encoded = quote(query)
+    data = _fetch_json(f"{BIBLE_API_BASE}/{encoded}?translation={translation}")
+    if not data:
+        return jsonify({"error": "Unable to load passage"}), 502
+
+    return jsonify({
+        "reference": data.get("reference"),
+        "translation": data.get("translation_name") or data.get("translation") or translation,
+        "translation_id": data.get("translation_id", translation),
+        "verses": data.get("verses", []),
+        "text": data.get("text", "")
+    })
+
 def _pick_book_text_url(formats):
     if not isinstance(formats, dict):
         return None
@@ -1614,6 +1733,14 @@ def _strip_gutenberg_boilerplate(text):
     cleaned = re.sub(r'\r\n?', '\n', cleaned)
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
     return cleaned
+
+def _fetch_json(url, timeout=12):
+    try:
+        response = requests.get(url, timeout=timeout)
+        response.raise_for_status()
+        return response.json()
+    except Exception:
+        return None
 
 def _extract_json(text):
     match = re.search(r"\{.*\}", text, re.S)
