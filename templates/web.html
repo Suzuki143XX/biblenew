@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -8,39 +8,54 @@
     <link rel="manifest" href="/manifest.json">
     <title>Bible AI</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700&display=swap');
         :root {
+            color-scheme: light;
             --font-scale: 1;
             --compact-padding: 20px;
             --compact-gap: 15px;
-            --glass-bg: rgba(20, 20, 25, 0.75);
-            --glass-border: rgba(255, 255, 255, 0.1);
-            --glass-highlight: rgba(255, 255, 255, 0.15);
+            --glass-bg: rgba(255, 255, 255, 0.9);
+            --glass-border: rgba(24, 32, 56, 0.16);
+            --glass-highlight: rgba(255, 255, 255, 0.9);
             --primary: #0A84FF;
-            --primary-glow: rgba(10, 132, 255, 0.4);
-            --secondary: #BF5AF2;
-            --success: #30D158;
-            --warning: #FF9F0A;
-            --danger: #FF375F;
-            --bg: #0a0a0f;
-            --surface: rgba(30, 30, 35, 0.8);
-            --text: #FFFFFF;
-            --text-secondary: rgba(255, 255, 255, 0.7);
-            --text-tertiary: rgba(255, 255, 255, 0.4);
+            --primary-glow: rgba(10, 132, 255, 0.25);
+            --secondary: #34C6FF;
+            --success: #12D18E;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+            --bg: #f5f7fb;
+            --bg-2: #e9eef8;
+            --surface: rgba(255, 255, 255, 0.86);
+            --surface-strong: rgba(255, 255, 255, 0.96);
+            --ink-strong: rgba(15, 23, 42, 0.06);
+            --ink: rgba(15, 23, 42, 0.12);
+            --ink-soft: rgba(15, 23, 42, 0.08);
+            --fullscreen-bg: rgba(245, 247, 251, 0.98);
+            --text: #0f172a;
+            --text-secondary: #4b5a74;
+            --text-tertiary: #6f7f9b;
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
-            --font-size: 1rem;
+            --font-size: 1.05rem;
             --animation-speed: 1;
         }
 
-        [data-theme="light"] {
-            --glass-bg: rgba(255, 255, 255, 0.85);
-            --glass-border: rgba(0, 0, 0, 0.1);
-            --glass-highlight: rgba(255, 255, 255, 0.9);
-            --bg: #f5f5f7;
-            --surface: rgba(255, 255, 255, 0.9);
-            --text: #1a1a1a;
-            --text-secondary: rgba(0, 0, 0, 0.6);
-            --text-tertiary: rgba(0, 0, 0, 0.4);
+        [data-theme="dark"] {
+            color-scheme: dark;
+            --glass-bg: rgba(15, 23, 42, 0.78);
+            --glass-border: rgba(148, 163, 184, 0.18);
+            --glass-highlight: rgba(255, 255, 255, 0.12);
+            --bg: #0b1220;
+            --bg-2: #0a0f1c;
+            --surface: rgba(15, 23, 42, 0.64);
+            --surface-strong: rgba(15, 23, 42, 0.82);
+            --ink-strong: rgba(0, 0, 0, 0.8);
+            --ink: rgba(0, 0, 0, 0.55);
+            --ink-soft: rgba(0, 0, 0, 0.25);
+            --fullscreen-bg: rgba(8, 8, 12, 0.92);
+            --text: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-tertiary: #94a3b8;
         }
 
         * {
@@ -48,7 +63,11 @@
             padding: 0;
             box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: "Sora", "Segoe UI", sans-serif;
+        }
+
+        h1, h2, h3, .brand-text, .challenge-title, .bible-reader-title, .bible-picks-title, .auth-title {
+            font-family: "Outfit", "Sora", sans-serif;
         }
 
         html {
@@ -70,7 +89,10 @@
         
         body {
             min-height: 100vh;
-            background: var(--bg);
+            background: radial-gradient(720px 460px at 8% 10%, rgba(10, 132, 255, 0.18), transparent 66%),
+                        radial-gradient(620px 420px at 92% -4%, rgba(52, 198, 255, 0.16), transparent 68%),
+                        radial-gradient(520px 420px at 50% 110%, rgba(18, 209, 142, 0.14), transparent 70%),
+                        linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
             color: var(--text);
             overflow-x: hidden;
         }
@@ -96,13 +118,13 @@
             position: absolute;
             border-radius: 50%;
             filter: blur(120px);
-            opacity: 0.3;
+            opacity: 0.35;
             animation: float 20s infinite ease-in-out;
         }
 
         .orb-1 { width: 600px; height: 600px; background: var(--primary); top: -300px; right: -200px; }
-        .orb-2 { width: 500px; height: 500px; background: var(--secondary); bottom: -200px; left: -100px; animation-delay: -7s; }
-        .orb-3 { width: 400px; height: 400px; background: var(--success); top: 40%; left: 60%; animation-delay: -14s; }
+        .orb-2 { width: 520px; height: 520px; background: var(--secondary); bottom: -220px; left: -120px; animation-delay: -7s; }
+        .orb-3 { width: 420px; height: 420px; background: var(--success); top: 40%; left: 60%; animation-delay: -14s; }
 
         @keyframes float {
             0%, 100% { transform: translate(0, 0) scale(1); }
@@ -167,14 +189,22 @@
 
         /* ===== HIGH CONTRAST ===== */
         body.high-contrast {
-            --primary: #0066FF;
-            --primary-glow: rgba(0, 102, 255, 0.6);
-            --text: #FFFFFF;
-            --text-secondary: rgba(255, 255, 255, 0.9);
-            --glass-bg: rgba(0, 0, 0, 0.9);
+            --primary: #0a5bff;
+            --primary-glow: rgba(10, 91, 255, 0.35);
+            --text: #0b1220;
+            --text-secondary: #1f2a44;
+            --glass-bg: var(--surface-strong);
+            --glass-border: rgba(15, 23, 42, 0.18);
         }
-        body.high-contrast .card {
-            border: 2px solid rgba(255,255,255,0.3);
+        html[data-theme="dark"] body.high-contrast {
+            --text: #f8fafc;
+            --text-secondary: #e2e8f0;
+            --glass-bg: rgba(15, 23, 42, 0.9);
+            --glass-border: rgba(148, 163, 184, 0.24);
+        }
+        body.high-contrast .card,
+        body.high-contrast .glass-card {
+            border: 2px solid var(--glass-border);
         }
         body.high-contrast .verse-text {
             font-weight: 500;
@@ -206,9 +236,12 @@
         }
 
         @media (min-width: 1024px) {
+            html {
+                font-size: 1.12rem;
+            }
             .app {
                 flex-direction: row;
-                max-width: 1600px;
+                max-width: 1800px;
                 margin: 0 auto;
                 width: 100%;
                 padding: 20px;
@@ -231,7 +264,7 @@
 
         @media (min-width: 1024px) {
             .header {
-                width: 260px;
+                width: 310px;
                 flex-direction: column;
                 align-items: stretch;
                 border-bottom: none;
@@ -240,7 +273,7 @@
                 height: calc(100vh - 40px);
                 position: sticky;
                 top: 20px;
-                padding: 24px;
+                padding: 30px;
             }
         }
 
@@ -478,14 +511,14 @@
         }
 
         .brand-text {
-            font-size: 20px;
+            font-size: 22px;
             font-weight: 700;
             letter-spacing: -0.5px;
         }
 
         @media (min-width: 1024px) {
             .brand-text {
-                font-size: 24px;
+                font-size: 26px;
             }
         }
 
@@ -503,7 +536,7 @@
             }
             
             .nav-item {
-                padding: 14px 16px;
+                padding: 16px 18px;
                 background: transparent;
                 border: 1px solid transparent;
                 border-radius: 14px;
@@ -512,7 +545,7 @@
                 display: flex;
                 align-items: center;
                 gap: 12px;
-                font-size: 15px;
+                font-size: 16px;
                 font-weight: 600;
                 transition: all 0.25s;
                 text-align: left;
@@ -559,8 +592,8 @@
         }
 
         .icon-btn {
-            width: 40px;
-            height: 40px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             background: var(--surface);
             border: 1px solid var(--glass-border);
@@ -569,7 +602,7 @@
             justify-content: center;
             cursor: pointer;
             transition: all 0.25s;
-            font-size: 18px;
+            font-size: 19px;
             color: var(--text);
             flex-shrink: 0;
         }
@@ -592,18 +625,18 @@
                 padding: 0;
                 padding-bottom: 20px;
                 display: grid;
-                grid-template-columns: 1fr 380px;
+                grid-template-columns: 1fr 520px;
                 grid-template-rows: auto 1fr;
-                gap: 20px;
+                gap: 28px;
                 align-content: start;
-                height: calc(100vh - 40px);
+                height: calc(100vh - 24px);
                 overflow: hidden;
             }
         }
 
         @media (min-width: 1400px) {
             .content {
-                grid-template-columns: 1fr 420px;
+                grid-template-columns: 1fr 560px;
             }
         }
 
@@ -642,17 +675,24 @@
         }
 
         .about-shell {
-            max-width: 470px;
+            max-width: 560px;
             margin: 0 auto;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
         }
+
+        .about-video-column { order: 2; }
+        .about-side { order: 1; }
 
         .about-slider-wrap {
             position: relative;
             overflow: hidden;
             border-radius: 24px;
-            border: 1px solid rgba(255,255,255,0.16);
-            background: #000;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+            border: 1px solid var(--glass-border);
+            background: var(--ink-strong);
+            box-shadow: 0 20px 40px rgba(15,23,42,0.2);
         }
 
         .about-slider-track {
@@ -696,7 +736,7 @@
             font-weight: 700;
             letter-spacing: 0.2px;
             color: rgba(255,255,255,0.95);
-            background: rgba(0,0,0,0.46);
+            background: var(--ink);
             border: 1px solid rgba(255,255,255,0.24);
             border-radius: 999px;
             padding: 4px 10px;
@@ -723,7 +763,7 @@
             object-fit: cover;
             transform: scale(1.06);
             transform-origin: center;
-            background: #000;
+            background: var(--ink-strong);
             border: none;
             border-radius: 0;
         }
@@ -736,7 +776,7 @@
             height: 32px;
             border-radius: 999px;
             border: 1px solid rgba(255,255,255,0.28);
-            background: rgba(0,0,0,0.45);
+            background: var(--ink);
             color: #fff;
             font-size: 18px;
             line-height: 1;
@@ -760,7 +800,7 @@
             padding: 0 8px;
             border-radius: 999px;
             border: 1px solid rgba(255,255,255,0.24);
-            background: rgba(0,0,0,0.45);
+            background: var(--ink);
             backdrop-filter: blur(6px);
             display: flex;
             align-items: center;
@@ -844,7 +884,7 @@
             transform: translate(-50%, -50%);
             font-size: 14px;
             color: rgba(255,255,255,0.9);
-            background: rgba(0,0,0,0.55);
+            background: var(--ink-strong);
             border: 1px solid rgba(255,255,255,0.24);
             border-radius: 999px;
             padding: 8px 14px;
@@ -867,7 +907,7 @@
         .about-info-card {
             border: 1px solid var(--glass-border);
             border-radius: 14px;
-            background: rgba(255,255,255,0.04);
+            background: var(--surface);
             padding: 12px;
         }
 
@@ -893,6 +933,67 @@
         }
 
         @media (min-width: 1024px) {
+            #about {
+                grid-column: 1 / span 2;
+            }
+
+            .about-shell {
+                max-width: 1200px;
+                margin: 0 auto;
+                display: grid;
+                grid-template-columns: minmax(520px, 1fr) 340px;
+                gap: 24px;
+                align-items: start;
+            }
+
+            .about-video-column {
+                display: flex;
+                justify-content: center;
+            }
+
+            .about-slider-wrap {
+                width: min(760px, 100%);
+                margin: 0 auto;
+            }
+
+            .about-side {
+                display: flex;
+                flex-direction: column;
+                gap: 14px;
+            }
+        }
+
+        html[data-theme="light"] .about-slider-wrap,
+        html[data-theme="light"] .about-video {
+            background: var(--surface-strong);
+        }
+
+        html[data-theme="light"] .about-now-playing,
+        html[data-theme="light"] .about-nav-btn,
+        html[data-theme="light"] .about-volume-wrap,
+        html[data-theme="light"] .about-paused-indicator {
+            background: var(--surface-strong);
+            color: var(--text);
+            border-color: var(--glass-border);
+        }
+
+        html[data-theme="light"] .about-progress-item {
+            background: rgba(15, 23, 42, 0.12);
+        }
+
+        html[data-theme="light"] .about-progress-fill {
+            background: var(--primary);
+        }
+
+        html[data-theme="light"] .about-dot {
+            background: rgba(15, 23, 42, 0.2);
+        }
+
+        html[data-theme="light"] .about-dot.active {
+            background: var(--primary);
+        }
+
+        @media (min-width: 1024px) {
             .tab-view {
                 display: none !important;
             }
@@ -909,13 +1010,41 @@
                 grid-row: 1 / span 2;
             }
             
-            #recommendations, #library, #comments, #about {
+            #recommendations, #library, #comments {
                 grid-column: 2;
                 grid-row: span 1;
             }
 
+            #about {
+                grid-column: 1 / span 2;
+                grid-row: span 2;
+            }
+
             #profile {
                 grid-column: 1 / span 2;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            body.tab-recommendations .content,
+            body.tab-library .content,
+            body.tab-comments .content,
+            body.tab-profile .content,
+            body.tab-about .content,
+            body.tab-donation .content {
+                grid-template-columns: 1fr;
+            }
+
+            body.tab-recommendations .tab-view.desktop-active,
+            body.tab-library .tab-view.desktop-active,
+            body.tab-comments .tab-view.desktop-active,
+            body.tab-profile .tab-view.desktop-active,
+            body.tab-about .tab-view.desktop-active,
+            body.tab-donation .tab-view.desktop-active {
+                grid-column: 1 / -1;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding-right: 0;
             }
         }
 
@@ -934,12 +1063,18 @@
             margin-bottom: 16px;
             position: relative;
             overflow: hidden;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
             transition: transform 0.25s, box-shadow 0.25s;
         }
 
+        @media (min-width: 1024px) {
+            .glass-card {
+                padding: 28px;
+            }
+        }
+
         .glass-card:hover {
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
         }
 
         @media (min-width: 1024px) {
@@ -2078,14 +2213,15 @@
         }
         .achievement-tooltip {
             position: fixed;
-            background: rgba(0,0,0,0.9);
-            color: white;
+            background: var(--surface-strong);
+            color: var(--text);
             padding: 8px 12px;
             border-radius: 8px;
             font-size: 11px;
             white-space: nowrap;
             z-index: 10000;
             pointer-events: none;
+            border: 1px solid var(--glass-border);
             opacity: 0;
             transition: opacity 0.2s;
         }
@@ -2340,6 +2476,13 @@
             color: var(--text);
         }
 
+        .bible-reader-btn.next-chapter {
+            display: none;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-color: transparent;
+            box-shadow: 0 6px 16px var(--primary-glow);
+        }
+
         .bible-reader-meta {
             font-size: 12px;
             color: var(--text-secondary);
@@ -2364,7 +2507,7 @@
             border: 1px solid var(--glass-border);
             border-radius: 12px;
             padding: 12px;
-            background: rgba(0,0,0,0.2);
+            background: var(--surface);
             max-height: 320px;
             overflow-y: auto;
             font-size: 14px;
@@ -2387,7 +2530,7 @@
         .reader-fullscreen {
             position: fixed;
             inset: 0;
-            background: rgba(8, 8, 12, 0.92);
+            background: var(--fullscreen-bg);
             backdrop-filter: blur(14px);
             display: none;
             z-index: 10000;
@@ -2767,6 +2910,20 @@
         }
         *::-webkit-scrollbar-thumb:hover {
             background: rgba(255,255,255,0.35);
+            border: 2px solid transparent;
+            background-clip: content-box;
+        }
+
+        html[data-theme="light"] * {
+            scrollbar-color: rgba(15,23,42,0.24) transparent;
+        }
+        html[data-theme="light"] *::-webkit-scrollbar-thumb {
+            background: rgba(15,23,42,0.2);
+            border: 2px solid transparent;
+            background-clip: content-box;
+        }
+        html[data-theme="light"] *::-webkit-scrollbar-thumb:hover {
+            background: rgba(15,23,42,0.3);
             border: 2px solid transparent;
             background-clip: content-box;
         }
@@ -3261,74 +3418,77 @@
 
             <!-- ABOUT TAB -->
             <div id="about" class="tab-view">
-                <div class="about-hero">
-                    <div style="font-size: 20px; font-weight: 700; margin-bottom: 6px;">About Us</div>
-                    <div style="font-size: 14px; color: var(--text-secondary);">
-                        Cross For All overview: mission, beliefs, leadership, and community impact.
-                    </div>
-                </div>
-
                 <div class="about-shell">
-                    <div class="about-slider-wrap">
-                        <button class="about-nav-btn prev" onclick="aboutPrev()" aria-label="Previous video">&#8249;</button>
-                        <button class="about-nav-btn next" onclick="aboutNext()" aria-label="Next video">&#8250;</button>
-                        <div class="about-progress" id="aboutProgress">
-                            <div class="about-progress-item"><div class="about-progress-fill" id="aboutProgressFill0"></div></div>
-                            <div class="about-progress-item"><div class="about-progress-fill" id="aboutProgressFill1"></div></div>
-                        </div>
-                        <div class="about-now-playing" id="aboutNowPlaying">Slide 1/2 • Playing • Vol 100%</div>
-                        <div class="about-volume-wrap" onclick="event.stopPropagation()">
-                            <input id="aboutVolumeSlider" class="about-volume-slider" type="range" min="0" max="1" step="0.01" value="1" aria-label="Video volume" oninput="setAboutVolume(this.value)" onchange="setAboutVolume(this.value)">
-                        </div>
-                        <div class="about-slider-track" id="aboutSliderTrack">
-                            <div class="about-slide">
-                                <div class="about-video-frame" id="aboutFrame0" onclick="toggleAboutPlayback()">
-                                    <video class="about-video" id="aboutVideo0" loop playsinline muted preload="none">
-                                        <source src="/media/videos/1.mp4?v=20260216-1100" type="video/mp4">
-                                    </video>
-                                    <div class="about-paused-indicator">&#9654; Paused</div>
+                    <div class="about-video-column">
+                        <div class="about-slider-wrap">
+                            <button class="about-nav-btn prev" onclick="aboutPrev()" aria-label="Previous video">&#8249;</button>
+                            <button class="about-nav-btn next" onclick="aboutNext()" aria-label="Next video">&#8250;</button>
+                            <div class="about-progress" id="aboutProgress">
+                                <div class="about-progress-item"><div class="about-progress-fill" id="aboutProgressFill0"></div></div>
+                                <div class="about-progress-item"><div class="about-progress-fill" id="aboutProgressFill1"></div></div>
+                            </div>
+                            <div class="about-now-playing" id="aboutNowPlaying">Slide 1/2   Playing   Vol 100%</div>
+                            <div class="about-volume-wrap" onclick="event.stopPropagation()">
+                                <input id="aboutVolumeSlider" class="about-volume-slider" type="range" min="0" max="1" step="0.01" value="1" aria-label="Video volume" oninput="setAboutVolume(this.value)" onchange="setAboutVolume(this.value)">
+                            </div>
+                            <div class="about-slider-track" id="aboutSliderTrack">
+                                <div class="about-slide">
+                                    <div class="about-video-frame" id="aboutFrame0" onclick="toggleAboutPlayback()">
+                                        <video class="about-video" id="aboutVideo0" loop playsinline muted preload="none">
+                                            <source src="/media/videos/1.mp4?v=20260216-1100" type="video/mp4">
+                                        </video>
+                                        <div class="about-paused-indicator">&#9654; Paused</div>
+                                    </div>
+                                </div>
+                                <div class="about-slide">
+                                    <div class="about-video-frame" id="aboutFrame1" onclick="toggleAboutPlayback()">
+                                        <video class="about-video" id="aboutVideo1" loop playsinline muted preload="none">
+                                            <source src="/media/videos/2.mp4?v=20260216-1100" type="video/mp4">
+                                        </video>
+                                        <div class="about-paused-indicator">&#9654; Paused</div>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="about-slide">
-                                <div class="about-video-frame" id="aboutFrame1" onclick="toggleAboutPlayback()">
-                                    <video class="about-video" id="aboutVideo1" loop playsinline muted preload="none">
-                                        <source src="/media/videos/2.mp4?v=20260216-1100" type="video/mp4">
-                                    </video>
-                                    <div class="about-paused-indicator">&#9654; Paused</div>
-                                </div>
+                            <div class="about-dots" id="aboutDots">
+                                <button class="about-dot active" onclick="setAboutSlide(0)" aria-label="Slide 1"></button>
+                                <button class="about-dot" onclick="setAboutSlide(1)" aria-label="Slide 2"></button>
                             </div>
-                        </div>
-                        <div class="about-dots" id="aboutDots">
-                            <button class="about-dot active" onclick="setAboutSlide(0)" aria-label="Slide 1"></button>
-                            <button class="about-dot" onclick="setAboutSlide(1)" aria-label="Slide 2"></button>
                         </div>
                     </div>
 
-                    <div class="about-info-grid">
-                        <div class="about-info-card">
-                            <div class="about-info-title">Mission</div>
-                            <div class="about-info-text">Cross For All describes its direction with three pillars: Cross Centered, Community Focused, and Church Sent.</div>
+                    <div class="about-side">
+                        <div class="about-hero">
+                            <div style="font-size: 20px; font-weight: 700; margin-bottom: 6px;">About Us</div>
+                            <div style="font-size: 14px; color: var(--text-secondary);">
+                                Cross For All overview: mission, beliefs, leadership, and community impact.
+                            </div>
                         </div>
-                        <div class="about-info-card">
-                            <div class="about-info-title">Vision & Beliefs</div>
-                            <div class="about-info-text">The ministry highlights a city where all can find hope in Jesus and emphasizes scripture-centered teaching, worship, prayer, and compassionate service.</div>
-                        </div>
-                        <div class="about-info-card">
-                            <div class="about-info-title">Leadership</div>
-                            <div class="about-info-text">Senior Pastor: Joshua Lee. Executive Pastor: Linda Lee. The site also notes support ministries including youth, outreach, and worship teams.</div>
-                        </div>
-                        <div class="about-info-card">
-                            <div class="about-info-title">Location & Times</div>
-                            <div class="about-info-text">Address listed: 1136 N. Tustin Ave, Anaheim, CA 92807. Sunday gatherings shown: 9 AM and 11 AM.</div>
-                        </div>
-                        <div class="about-info-card">
-                            <div class="about-info-title">Learn More</div>
-                            <div class="about-info-text">Official page: <a class="about-link-inline" href="https://www.crossforall.com/about" target="_blank" rel="noopener noreferrer">crossforall.com/about</a></div>
+
+                        <div class="about-info-grid">
+                            <div class="about-info-card">
+                                <div class="about-info-title">Mission</div>
+                                <div class="about-info-text">Cross For All describes its direction with three pillars: Cross Centered, Community Focused, and Church Sent.</div>
+                            </div>
+                            <div class="about-info-card">
+                                <div class="about-info-title">Vision & Beliefs</div>
+                                <div class="about-info-text">The ministry highlights a city where all can find hope in Jesus and emphasizes scripture-centered teaching, worship, prayer, and compassionate service.</div>
+                            </div>
+                            <div class="about-info-card">
+                                <div class="about-info-title">Leadership</div>
+                                <div class="about-info-text">Senior Pastor: Joshua Lee. Executive Pastor: Linda Lee. The site also notes support ministries including youth, outreach, and worship teams.</div>
+                            </div>
+                            <div class="about-info-card">
+                                <div class="about-info-title">Location & Times</div>
+                                <div class="about-info-text">Address listed: 1136 N. Tustin Ave, Anaheim, CA 92807. Sunday gatherings shown: 9 AM and 11 AM.</div>
+                            </div>
+                            <div class="about-info-card">
+                                <div class="about-info-title">Learn More</div>
+                                <div class="about-info-text">Official page: <a class="about-link-inline" href="https://www.crossforall.com/about" target="_blank" rel="noopener noreferrer">crossforall.com/about</a></div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-
             <!-- DONATION TAB -->
             <div id="donation" class="tab-view">
                 <div class="glass-card" style="padding: 24px; margin-bottom: 16px;">
@@ -3409,7 +3569,8 @@
             <div class="bible-reader-pagination">
                 <button class="bible-reader-btn secondary" type="button" onclick="prevReaderPage()">Prev Page</button>
                 <div class="bible-reader-page" id="readerFullscreenPageIndicator">Page 0/0</div>
-                <button class="bible-reader-btn secondary" type="button" onclick="nextReaderPage()">Next Page</button>
+                <button class="bible-reader-btn secondary" id="readerFullscreenNextPageBtn" type="button" onclick="nextReaderPage()">Next Page</button>
+                <button class="bible-reader-btn next-chapter" id="readerFullscreenNextChapterBtn" type="button" onclick="nextBibleChapter()">Next Chapter</button>
             </div>
             <div class="bible-reader-content" id="readerFullscreenContent">Waiting for selection.</div>
         </div>
@@ -3676,7 +3837,7 @@
         let currentTab = 'discover';
         let libraryData = { liked: [], saved: [], collections: [] };
         let settings = {
-            darkMode: true,
+            darkMode: false,
             fontSize: 'medium',
             animations: true,
             sound: true,
@@ -3692,6 +3853,7 @@
             ttsEnabled: false,
             ttsSpeed: 1
         };
+        let themeAuto = false;
         let wakeLockHandle = null;
         
         // Text to Speech
@@ -5434,6 +5596,8 @@
             const fsContentEl = document.getElementById('readerFullscreenContent');
             const indicatorEl = document.getElementById('readerPageIndicator');
             const fsIndicatorEl = document.getElementById('readerFullscreenPageIndicator');
+            const fsNextPageBtn = document.getElementById('readerFullscreenNextPageBtn');
+            const fsNextChapterBtn = document.getElementById('readerFullscreenNextChapterBtn');
             const total = readerPages.length;
             const idx = Math.min(readerPageIndex, Math.max(0, total - 1));
             readerPageIndex = idx;
@@ -5446,6 +5610,19 @@
             const label = total ? `Page ${idx + 1}/${total}` : 'Page 0/0';
             if (indicatorEl) indicatorEl.textContent = label;
             if (fsIndicatorEl) fsIndicatorEl.textContent = label;
+            if (fsNextPageBtn && fsNextChapterBtn) {
+                const isFullscreen = document.body.classList.contains('reader-fullscreen-open');
+                if (!isFullscreen) {
+                    fsNextChapterBtn.style.display = 'none';
+                    fsNextPageBtn.style.display = '';
+                } else if (total && idx >= total - 1) {
+                    fsNextPageBtn.style.display = 'none';
+                    fsNextChapterBtn.style.display = 'inline-flex';
+                } else {
+                    fsNextPageBtn.style.display = 'inline-flex';
+                    fsNextChapterBtn.style.display = 'none';
+                }
+            }
         }
 
         function prevReaderPage() {
@@ -5468,9 +5645,7 @@
             const chapter = document.getElementById('readerCurrentChapter');
             const fsChapter = document.getElementById('readerFullscreenChapter');
             if (fsChapter && chapter) fsChapter.textContent = chapter.textContent;
-            if (active) {
-                renderReaderPage();
-            }
+            renderReaderPage();
         }
 
         function closeReaderFullscreen(e) {
@@ -6231,10 +6406,16 @@
             }
         };
 
-        function toggleTheme() {
-            settings.darkMode = !settings.darkMode;
+        function applyTheme() {
             document.documentElement.setAttribute('data-theme', settings.darkMode ? 'dark' : 'light');
-            document.getElementById('darkToggle').classList.toggle('active');
+            const toggle = document.getElementById('darkToggle');
+            if (toggle) toggle.classList.toggle('active', settings.darkMode);
+        }
+
+        function toggleTheme() {
+            themeAuto = false;
+            settings.darkMode = !settings.darkMode;
+            applyTheme();
             AudioSys.playClick();
             saveSettings();
         }
@@ -6469,8 +6650,9 @@
 
         function loadSettings() {
             // Default settings with new options
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
             const defaults = {
-                darkMode: true,
+                darkMode: false,
                 fontSize: 'medium',
                 animations: true,
                 sound: true,
@@ -6491,14 +6673,21 @@
             const saved = localStorage.getItem('bibleSettings');
             if (saved) {
                 settings = {...defaults, ...JSON.parse(saved)};
+                themeAuto = false;
             } else {
-                settings = defaults;
+                settings = {...defaults, darkMode: !!prefersDark};
+                themeAuto = true;
             }
             
-            // Apply theme
-            if (!settings.darkMode) {
-                document.documentElement.setAttribute('data-theme', 'light');
-                document.getElementById('darkToggle').classList.remove('active');
+            // Apply theme (sync to system when auto)
+            applyTheme();
+            const schemeMedia = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+            if (schemeMedia && themeAuto) {
+                schemeMedia.addEventListener('change', (e) => {
+                    if (!themeAuto) return;
+                    settings.darkMode = e.matches;
+                    applyTheme();
+                });
             }
             
             // Apply font size class to both html and body
