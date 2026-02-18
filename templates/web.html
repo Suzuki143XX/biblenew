@@ -2320,6 +2320,13 @@
             font-size: 60px;
             opacity: 0.2;
         }
+        .daily-challenge.complete .challenge-text {
+            opacity: 0.75;
+        }
+        .daily-challenge.complete .challenge-progress,
+        .daily-challenge.complete .challenge-progress-text {
+            display: none;
+        }
         .challenge-title {
             font-size: 14px;
             font-weight: 700;
@@ -3034,11 +3041,14 @@
                 <div class="daily-challenge" id="dailyChallenge" style="display: none;">
                     <div class="challenge-title">🎯 Daily Challenge</div>
                     <div class="challenge-text" id="challengeText">Save 2 verses to your library</div>
-                    <div class="challenge-progress">
+                    <div class="challenge-progress" id="challengeProgressBar">
                         <div class="challenge-fill" id="challengeFill" style="width: 0%"></div>
                     </div>
-                    <div style="text-align: right; font-size: 12px; margin-top: 6px; opacity: 0.8;">
+                    <div class="challenge-progress-text" id="challengeProgressText" style="text-align: right; font-size: 12px; margin-top: 6px; opacity: 0.8;">
                         <span id="challengeProgress">0</span>/<span id="challengeGoal">2</span>
+                    </div>
+                    <div class="challenge-cooldown" id="challengeCooldown" style="display: none; font-size: 12px; margin-top: 8px; opacity: 0.75;">
+                        Next challenge in 60m
                     </div>
                 </div>
 
@@ -3195,7 +3205,6 @@
                     <button class="library-tab active" onclick="switchLibraryTab('all')">📚 All</button>
                     <button class="library-tab" onclick="switchLibraryTab('collections')">📁 Collections</button>
                     <button class="library-tab" onclick="switchLibraryTab('favorites')">⭐ Favorites</button>
-                    <button class="library-tab" onclick="switchLibraryTab('tags')">🏷️ Tags</button>
                 </div>
 
                 <!-- Search & Filter -->
@@ -3261,15 +3270,6 @@
                     </div>
                 </div>
 
-                <!-- Tags View -->
-                <div id="tagsView" style="display: none;">
-                    <div class="glass-card">
-                        <div style="font-size: 14px; font-weight: 700; margin-bottom: 12px;">🏷️ Your Tags</div>
-                        <div class="tag-list" id="userTagsList">
-                            <span style="opacity: 0.6;">No tags yet. Add tags to organize your verses!</span>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- COMMENTS TAB - Enhanced -->
@@ -3929,7 +3929,9 @@
         let autoRecInterval = null;
         let verseCheckInterval = null;
         let presencePingInterval = null;
+        let commentsRefreshInterval = null;
         let challengeRefreshInterval = null;
+        let challengeCountdownInterval = null;
         let notificationPollInterval = null;
         const VERSE_POLL_INTERVAL_MS = 5000;
         const STATUS_REFRESH_INTERVAL_MS = 15000;
@@ -4345,6 +4347,10 @@
             if (tab === 'comments') {
                 if (currentCommentsView === 'community') loadCommunityMessages();
                 else loadComments();
+                startCommentsPolling();
+                updateOnlineUsers();
+            } else if (prevTab === 'comments') {
+                stopCommentsPolling();
             }
             if (tab === 'profile') loadProfileStats();
             if (tab === 'recommendations') loadRecommendations();
@@ -4634,14 +4640,35 @@
             btn.style.transform = 'scale(0.97)';
             setTimeout(() => btn.style.transform = '', 100);
             
-            const res = await fetch('/api/generate-recommendation', {method: 'POST'});
+            const excludeIds = getRecentRecIds(20);
+            const res = await fetch('/api/generate-recommendation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ exclude_ids: excludeIds })
+            });
             const data = await res.json();
             
             if (data.success) {
-                showRecommendation(data.recommendation);
-                addToRecHistory(data.recommendation);
+                let recommendation = data.recommendation;
+                if (isDuplicateRec(recommendation)) {
+                    excludeIds.push(recommendation.id);
+                    const retry = await fetch('/api/generate-recommendation', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ exclude_ids: excludeIds })
+                    });
+                    const retryData = await retry.json();
+                    if (retryData.success) recommendation = retryData.recommendation;
+                }
+                showRecommendation(recommendation);
+                addToRecHistory(recommendation);
                 if (!silent && settings.notifications) showToast('New recommendation!');
             }
+        }
+
+        function isDuplicateRec(rec) {
+            const history = JSON.parse(localStorage.getItem('recHistory') || '[]');
+            return !!history.find(item => item && rec && item.id === rec.id);
         }
 
         function showRecommendation(rec) {
@@ -4927,7 +4954,7 @@
         // Comments
         async function loadComments() {
             if (!currentVerse) return;
-            const res = await fetch(`/api/comments/${currentVerse.id}`);
+            const res = await fetch(`/api/comments/${currentVerse.id}`, { cache: 'no-store' });
             const comments = await res.json();
             
             const list = document.getElementById('commentsList');
@@ -4966,7 +4993,7 @@
 
         // Community Chat
         async function loadCommunityMessages() {
-            const res = await fetch('/api/community');
+            const res = await fetch('/api/community', { cache: 'no-store' });
             const messages = await res.json();
             const filtered = currentCommunityFilter === 'all'
                 ? messages
@@ -5445,10 +5472,8 @@
         }
 
         function trackDailyAction(action, verseId) {
-            // Keep signature for existing call sites; server tracks save actions.
-            if (action === 'save') {
-                updateChallengeProgress();
-            }
+            // Keep signature for existing call sites; server tracks action progress.
+            updateChallengeProgress();
         }
 
         async function initDailyChallenge() {
@@ -5481,7 +5506,14 @@
                 if (fillEl) fillEl.style.width = pct + '%';
                 if (progressEl) progressEl.textContent = String(Math.min(progress, goal));
 
+                const progressBarEl = document.getElementById('challengeProgressBar');
+                const progressTextEl = document.getElementById('challengeProgressText');
+                const cooldownEl = document.getElementById('challengeCooldown');
+                const challengeEl = document.getElementById('dailyChallenge');
+
                 if (data.completed) {
+                    document.getElementById('challengeText').textContent = 'Challenge complete!';
+                    if (challengeEl) challengeEl.classList.add('complete');
                     const periodKey = String(data.challenge_id || data.date || new Date().toISOString().slice(0, 13));
                     if (localStorage.getItem(DAILY_CHALLENGE_TOAST_KEY) !== periodKey) {
                         localStorage.setItem(DAILY_CHALLENGE_TOAST_KEY, periodKey);
@@ -5490,6 +5522,44 @@
                             showToast(`🎯 Challenge Complete! +${xpReward || 100} XP`);
                             AudioSys.playSuccess();
                         }
+                    }
+                    if (progressBarEl) progressBarEl.style.display = 'none';
+                    if (progressTextEl) progressTextEl.style.display = 'none';
+                    if (cooldownEl) {
+                        cooldownEl.style.display = 'block';
+                        const expiresAt = data.expires_at ? new Date(data.expires_at) : null;
+                        const updateCooldown = () => {
+                            if (!expiresAt || Number.isNaN(expiresAt.getTime())) {
+                                cooldownEl.textContent = 'Next challenge starting soon...';
+                                return;
+                            }
+                            const now = new Date();
+                            const remainingMs = Math.max(0, expiresAt.getTime() - now.getTime());
+                            const mins = Math.floor(remainingMs / 60000);
+                            const secs = Math.floor((remainingMs % 60000) / 1000);
+                            if (remainingMs > 0) {
+                                cooldownEl.textContent = `Next challenge in ${mins}m ${secs}s`;
+                                return;
+                            }
+                            cooldownEl.textContent = 'Next challenge starting soon...';
+                            if (challengeCountdownInterval) {
+                                clearInterval(challengeCountdownInterval);
+                                challengeCountdownInterval = null;
+                            }
+                            updateChallengeProgress();
+                        };
+                        updateCooldown();
+                        if (challengeCountdownInterval) clearInterval(challengeCountdownInterval);
+                        challengeCountdownInterval = setInterval(updateCooldown, 1000);
+                    }
+                } else {
+                    if (challengeEl) challengeEl.classList.remove('complete');
+                    if (progressBarEl) progressBarEl.style.display = 'block';
+                    if (progressTextEl) progressTextEl.style.display = 'block';
+                    if (cooldownEl) cooldownEl.style.display = 'none';
+                    if (challengeCountdownInterval) {
+                        clearInterval(challengeCountdownInterval);
+                        challengeCountdownInterval = null;
                     }
                 }
             } catch (_) {
@@ -5890,59 +5960,52 @@
             showToast(`Recommendations: ${type.charAt(0).toUpperCase() + type.slice(1)}`);
         }
 
-        const MOOD_VERSES = {
-            peace: [
-                { ref: 'Philippians 4:7', text: 'And the peace of God, which passeth all understanding, shall keep your hearts and minds through Christ Jesus.' },
-                { ref: 'John 14:27', text: 'Peace I leave with you, my peace I give unto you: not as the world giveth, give I unto you.' }
-            ],
-            strength: [
-                { ref: 'Isaiah 40:31', text: 'But they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles.' },
-                { ref: '2 Corinthians 12:9', text: 'My grace is sufficient for thee: for my strength is made perfect in weakness.' }
-            ],
-            hope: [
-                { ref: 'Romans 15:13', text: 'Now the God of hope fill you with all joy and peace in believing, that ye may abound in hope, through the power of the Holy Ghost.' },
-                { ref: 'Jeremiah 29:11', text: 'For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil.' }
-            ],
-            love: [
-                { ref: '1 Corinthians 13:13', text: 'And now abideth faith, hope, charity, these three; but the greatest of these is charity.' },
-                { ref: '1 John 4:19', text: 'We love him, because he first loved us.' }
-            ],
-            gratitude: [
-                { ref: '1 Thessalonians 5:18', text: 'In every thing give thanks: for this is the will of God in Christ Jesus concerning you.' },
-                { ref: 'Psalm 107:1', text: 'O give thanks unto the LORD, for he is good: for his mercy endureth for ever.' }
-            ],
-            guidance: [
-                { ref: 'Psalm 32:8', text: 'I will instruct thee and teach thee in the way which thou shalt go: I will guide thee with mine eye.' },
-                { ref: 'Proverbs 3:6', text: 'In all thy ways acknowledge him, and he shall direct thy paths.' }
-            ]
-        };
-
         async function getMoodVerse(mood) {
-            const verses = MOOD_VERSES[mood] || MOOD_VERSES.peace;
-            const verse = verses[Math.floor(Math.random() * verses.length)];
-            
-            // Add to rec history
-            addToRecHistory({ ...verse, reason: `For when you're feeling ${mood}` });
-            
-            // Show in rec list
-            const recList = document.getElementById('recList');
-            recList.innerHTML = `
-                <div class="rec-card" style="animation: slideIn 0.3s ease;">
-                    <div class="rec-reason">💭 ${mood.charAt(0).toUpperCase() + mood.slice(1)}</div>
-                    <div style="font-style: italic; margin-bottom: 8px;">${verse.text}</div>
-                    <div style="font-weight: 700; color: var(--primary);">${verse.ref}</div>
-                </div>
-            `;
-            
-            showToast(`Verses for when you're feeling ${mood}`);
+            try {
+                const excludeIds = getRecentRecIds(20);
+                const url = excludeIds.length
+                    ? `/api/mood/${encodeURIComponent(mood)}?exclude=${excludeIds.join(',')}`
+                    : `/api/mood/${encodeURIComponent(mood)}`;
+                const res = await fetch(url, { cache: 'no-store' });
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    throw new Error(data.error || 'Failed to load verse');
+                }
+                const verse = { ref: data.ref, text: data.text, id: data.id };
+                
+                addToRecHistory({ ...verse, reason: `For when you're feeling ${mood}` });
+                
+                const recList = document.getElementById('recList');
+                recList.innerHTML = `
+                    <div class="rec-card" style="animation: slideIn 0.3s ease;">
+                        <div class="rec-reason">💭 ${mood.charAt(0).toUpperCase() + mood.slice(1)}</div>
+                        <div style="font-style: italic; margin-bottom: 8px;">${verse.text}</div>
+                        <div style="font-weight: 700; color: var(--primary);">${verse.ref}</div>
+                    </div>
+                `;
+                
+                showToast(`Verses for when you're feeling ${mood}`);
+            } catch (e) {
+                showToast('Unable to fetch a new verse. Try again.');
+            }
         }
 
         function addToRecHistory(verse) {
-            const history = JSON.parse(localStorage.getItem('recHistory') || '[]');
+            const history = JSON.parse(localStorage.getItem('recHistory') || '[]')
+                .filter(item => item && item.id !== verse.id);
             history.unshift({ ...verse, timestamp: Date.now() });
-            if (history.length > 10) history.pop();
+            if (history.length > 20) history.pop();
             localStorage.setItem('recHistory', JSON.stringify(history));
             renderRecHistory();
+        }
+
+        function getRecentRecIds(limit = 15) {
+            const history = JSON.parse(localStorage.getItem('recHistory') || '[]');
+            const ids = [];
+            history.forEach(item => {
+                if (item && item.id && !ids.includes(item.id)) ids.push(item.id);
+            });
+            return ids.slice(0, limit);
         }
 
         function renderRecHistory() {
@@ -5973,8 +6036,7 @@
             
             document.getElementById('collectionsView').style.display = tab === 'collections' ? 'block' : 'none';
             document.getElementById('favoritesDropZone').style.display = tab === 'favorites' ? 'block' : 'none';
-            document.getElementById('versesListCard').style.display = tab === 'tags' ? 'none' : 'block';
-            document.getElementById('tagsView').style.display = tab === 'tags' ? 'block' : 'none';
+            document.getElementById('versesListCard').style.display = 'block';
             document.getElementById('librarySearch').style.display = tab === 'collections' ? 'none' : 'block';
             
             if (tab === 'all') loadLibrary();
@@ -6434,6 +6496,23 @@
                     if (el) el.textContent = String(Math.max(1, count));
                 })
                 .catch(() => {});
+        }
+
+        function startCommentsPolling() {
+            if (commentsRefreshInterval) clearInterval(commentsRefreshInterval);
+            commentsRefreshInterval = setInterval(() => {
+                if (currentTab !== 'comments') return;
+                if (currentCommentsView === 'community') loadCommunityMessages();
+                else loadComments();
+                updateOnlineUsers();
+            }, 3000);
+        }
+
+        function stopCommentsPolling() {
+            if (commentsRefreshInterval) {
+                clearInterval(commentsRefreshInterval);
+                commentsRefreshInterval = null;
+            }
         }
 
         // Simulate online users updating
