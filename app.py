@@ -1255,25 +1255,25 @@ def generate_smart_recommendation(self, user_id, exclude_ids=None):
         
         row = c.fetchone()
         
-            if row:
-                def pick_reason(book_name=None, preferred=False):
-                    if preferred and book_name:
-                        options = [
-                            f"Because you like {book_name}",
-                            f"A fresh passage from {book_name}",
-                            f"Something uplifting from {book_name}",
-                            f"More wisdom in {book_name}"
-                        ]
-                    else:
-                        options = [
-                            "Recommended for you",
-                            "A fresh verse for today",
-                            "Something to reflect on",
-                            "A new verse to explore"
-                        ]
-                    return random.choice(options)
-                try:
-                    return {
+        if row:
+            def pick_reason(book_name=None, preferred=False):
+                if preferred and book_name:
+                    options = [
+                        f"Because you like {book_name}",
+                        f"A fresh passage from {book_name}",
+                        f"Something uplifting from {book_name}",
+                        f"More wisdom in {book_name}"
+                    ]
+                else:
+                    options = [
+                        "Recommended for you",
+                        "A fresh verse for today",
+                        "Something to reflect on",
+                        "A new verse to explore"
+                    ]
+                return random.choice(options)
+            try:
+                return {
                         "id": row['id'], 
                         "ref": row['reference'], 
                         "text": row['text'],
