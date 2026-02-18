@@ -2346,6 +2346,20 @@
             margin-bottom: 10px;
         }
 
+        .bible-reader-pagination {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .bible-reader-page {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+
         .bible-reader-content {
             border: 1px solid var(--glass-border);
             border-radius: 12px;
@@ -2368,6 +2382,44 @@
             margin-right: 6px;
             color: var(--text-tertiary);
             font-weight: 700;
+        }
+
+        .reader-fullscreen {
+            position: fixed;
+            inset: 0;
+            background: rgba(8, 8, 12, 0.92);
+            backdrop-filter: blur(14px);
+            display: none;
+            z-index: 10000;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .reader-fullscreen.active {
+            display: block;
+        }
+
+        .reader-fullscreen-inner {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .reader-fullscreen-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        body.reader-fullscreen-open {
+            overflow: hidden;
+        }
+
+        .reader-fullscreen .bible-reader-content {
+            max-height: none;
+            height: calc(100vh - 200px);
         }
 
         .quick-filters {
@@ -2844,9 +2896,15 @@
                             <button class="bible-reader-btn secondary" type="button" onclick="prevBibleChapter()">Prev</button>
                             <button class="bible-reader-btn secondary" type="button" onclick="nextBibleChapter()">Next</button>
                         </div>
-                        <div class="bible-reader-meta" id="readerMeta">Select a book and chapter to begin reading.</div>
-                        <div class="bible-reader-content" id="readerContent">Waiting for selection.</div>
+                    <div class="bible-reader-meta" id="readerMeta">Select a book and chapter to begin reading.</div>
+                    <div class="bible-reader-pagination">
+                        <button class="bible-reader-btn secondary" type="button" onclick="prevReaderPage()">Prev Page</button>
+                        <div class="bible-reader-page" id="readerPageIndicator">Page 0/0</div>
+                        <button class="bible-reader-btn secondary" type="button" onclick="nextReaderPage()">Next Page</button>
+                        <button class="bible-reader-btn" type="button" onclick="toggleReaderFullscreen()">Full Screen</button>
                     </div>
+                    <div class="bible-reader-content" id="readerContent">Waiting for selection.</div>
+                </div>
                 </div>
 
                 <!-- Quick Filters -->
@@ -3341,6 +3399,22 @@
         <div class="fullscreen-hint">Click background to close</div>
     </div>
 
+    <div class="reader-fullscreen" id="readerFullscreen" onclick="closeReaderFullscreen(event)">
+        <div class="reader-fullscreen-inner">
+            <div class="reader-fullscreen-header">
+                <div class="bible-reader-title">📘 Ebook Reader</div>
+                <div class="bible-reader-current" id="readerFullscreenChapter">Chapter: —</div>
+                <button class="bible-reader-btn secondary" type="button" onclick="toggleReaderFullscreen()">Close</button>
+            </div>
+            <div class="bible-reader-pagination">
+                <button class="bible-reader-btn secondary" type="button" onclick="prevReaderPage()">Prev Page</button>
+                <div class="bible-reader-page" id="readerFullscreenPageIndicator">Page 0/0</div>
+                <button class="bible-reader-btn secondary" type="button" onclick="nextReaderPage()">Next Page</button>
+            </div>
+            <div class="bible-reader-content" id="readerFullscreenContent">Waiting for selection.</div>
+        </div>
+    </div>
+
     <!-- Settings Modal -->
     <div class="modal" id="settingsModal" onclick="closeSettings(event)">
         <div class="modal-content" onclick="event.stopPropagation()">
@@ -3699,6 +3773,8 @@
         let countdownSyncedAt = 0;
         let biblePickState = { picks: [] };
         let bibleReaderState = { books: [], translation: 'web' };
+        let readerPages = [];
+        let readerPageIndex = 0;
         // Permanent Timer State
         let sessionStartTime = null;
         let timerInterval = null;
@@ -5331,6 +5407,77 @@
             if (metaEl) metaEl.textContent = `Selected: ${ref}`;
         }
 
+        function buildReaderPages(verses) {
+            const pages = [];
+            if (!Array.isArray(verses) || !verses.length) return pages;
+            const maxChars = 1400;
+            const maxVerses = 12;
+            let current = [];
+            let charCount = 0;
+            verses.forEach(v => {
+                const text = String(v.text || '');
+                const nextChars = charCount + text.length;
+                if (current.length >= maxVerses || (nextChars > maxChars && current.length)) {
+                    pages.push(current);
+                    current = [];
+                    charCount = 0;
+                }
+                current.push(v);
+                charCount += text.length;
+            });
+            if (current.length) pages.push(current);
+            return pages;
+        }
+
+        function renderReaderPage() {
+            const contentEl = document.getElementById('readerContent');
+            const fsContentEl = document.getElementById('readerFullscreenContent');
+            const indicatorEl = document.getElementById('readerPageIndicator');
+            const fsIndicatorEl = document.getElementById('readerFullscreenPageIndicator');
+            const total = readerPages.length;
+            const idx = Math.min(readerPageIndex, Math.max(0, total - 1));
+            readerPageIndex = idx;
+            const page = total ? readerPages[idx] : [];
+            const html = page.length
+                ? page.map(v => `<div class="reader-verse"><span>${v.verse}</span>${escapeHtml(v.text || '')}</div>`).join('')
+                : `<div style="opacity: 0.7;">No verses found.</div>`;
+            if (contentEl) contentEl.innerHTML = html;
+            if (fsContentEl) fsContentEl.innerHTML = html;
+            const label = total ? `Page ${idx + 1}/${total}` : 'Page 0/0';
+            if (indicatorEl) indicatorEl.textContent = label;
+            if (fsIndicatorEl) fsIndicatorEl.textContent = label;
+        }
+
+        function prevReaderPage() {
+            if (readerPageIndex <= 0) return;
+            readerPageIndex -= 1;
+            renderReaderPage();
+        }
+
+        function nextReaderPage() {
+            if (readerPageIndex >= readerPages.length - 1) return;
+            readerPageIndex += 1;
+            renderReaderPage();
+        }
+
+        function toggleReaderFullscreen() {
+            const overlay = document.getElementById('readerFullscreen');
+            if (!overlay) return;
+            const active = overlay.classList.toggle('active');
+            document.body.classList.toggle('reader-fullscreen-open', active);
+            const chapter = document.getElementById('readerCurrentChapter');
+            const fsChapter = document.getElementById('readerFullscreenChapter');
+            if (fsChapter && chapter) fsChapter.textContent = chapter.textContent;
+            if (active) {
+                renderReaderPage();
+            }
+        }
+
+        function closeReaderFullscreen(e) {
+            if (!e || e.target.id !== 'readerFullscreen') return;
+            toggleReaderFullscreen();
+        }
+
 
         async function loadBibleBooks() {
             const selectEl = document.getElementById('readerBookSelect');
@@ -5389,12 +5536,19 @@
                 if (!res.ok || data.error) {
                     contentEl.innerHTML = `<div style="opacity: 0.7;">Unable to load chapter.</div>`;
                     if (metaEl) metaEl.textContent = data.error || 'Unable to load chapter.';
+                    readerPages = [];
+                    readerPageIndex = 0;
+                    renderReaderPage();
                     return;
                 }
 
                 const reference = data.reference || `${book} ${chapter}`;
                 if (labelEl) labelEl.textContent = `Chapter: ${reference}`;
-                renderBibleChapter(data);
+                const fsLabel = document.getElementById('readerFullscreenChapter');
+                if (fsLabel) fsLabel.textContent = `Chapter: ${reference}`;
+                readerPages = buildReaderPages(Array.isArray(data.verses) ? data.verses : []);
+                readerPageIndex = 0;
+                renderReaderPage();
                 if (metaEl) {
                     const translationLabel = data.translation || data.translation_id || translation;
                     metaEl.textContent = `${translationLabel} • ${data.verses ? data.verses.length : 0} verses`;
@@ -5403,20 +5557,17 @@
             } catch (_) {
                 contentEl.innerHTML = `<div style="opacity: 0.7;">Network error.</div>`;
                 if (metaEl) metaEl.textContent = 'Network error while loading chapter.';
+                readerPages = [];
+                readerPageIndex = 0;
+                renderReaderPage();
             }
         }
 
         function renderBibleChapter(data) {
-            const contentEl = document.getElementById('readerContent');
-            if (!contentEl) return;
             const verses = Array.isArray(data.verses) ? data.verses : [];
-            if (!verses.length) {
-                contentEl.innerHTML = `<div style="opacity: 0.7;">No verses found.</div>`;
-                return;
-            }
-            contentEl.innerHTML = verses.map(v => `
-                <div class="reader-verse"><span>${v.verse}</span>${escapeHtml(v.text || '')}</div>
-            `).join('');
+            readerPages = buildReaderPages(verses);
+            readerPageIndex = 0;
+            renderReaderPage();
         }
 
         function prevBibleChapter() {
