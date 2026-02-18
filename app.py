@@ -44,6 +44,15 @@ OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4.1')
 BIBLE_API_BASE = "https://bible-api.com"
 DEFAULT_TRANSLATION = os.environ.get('BIBLE_API_TRANSLATION', 'web').lower()
 
+MOOD_KEYWORDS = {
+    "peace": ["peace", "calm", "rest", "still"],
+    "strength": ["strength", "strong", "power", "courage", "mighty"],
+    "hope": ["hope", "future", "promise", "trust", "faith"],
+    "love": ["love", "beloved", "mercy", "grace", "compassion"],
+    "gratitude": ["thanks", "thank", "grateful", "praise", "give thanks"],
+    "guidance": ["guide", "path", "direct", "wisdom", "counsel"]
+}
+
 # Role-based codes
 ROLE_CODES = {
     'user': None,  # No code needed
@@ -611,6 +620,19 @@ def get_hourly_xp_reward(user_id, period_key):
     value = int(hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8], 16)
     return 100 + (value % 401)
 
+def pick_hourly_challenge(user_id, period_key):
+    challenges = [
+        {"id": "save2", "action": "save", "goal": 2, "text": "Save 2 verses to your library"},
+        {"id": "save3", "action": "save", "goal": 3, "text": "Save 3 verses to your library"},
+        {"id": "like3", "action": "like", "goal": 3, "text": "Like 3 verses"},
+        {"id": "like5", "action": "like", "goal": 5, "text": "Like 5 verses"},
+        {"id": "comment1", "action": "comment", "goal": 1, "text": "Post 1 comment"},
+        {"id": "comment2", "action": "comment", "goal": 2, "text": "Post 2 comments"}
+    ]
+    seed = f"{user_id}:{period_key}"
+    value = int(hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8], 16)
+    return challenges[value % len(challenges)]
+
 def record_daily_action(user_id, action, verse_id=None):
     """Persist unique per-hour user actions used by Hourly Challenge."""
     conn, db_type = get_db()
@@ -1128,10 +1150,18 @@ _current_api_cache = {}
 _current_api_cache_lock = threading.Lock()
 
 # Bind the method to the class
-def generate_smart_recommendation(self, user_id):
+def generate_smart_recommendation(self, user_id, exclude_ids=None):
     """Generate recommendation based on user likes"""
     conn, db_type = get_db()
     c = get_cursor(conn, db_type)
+    exclude_ids = exclude_ids or []
+    cleaned_exclude = []
+    for item in exclude_ids:
+        try:
+            cleaned_exclude.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    exclude_ids = list(dict.fromkeys(cleaned_exclude))
     
     try:
         if db_type == 'postgres':
@@ -1165,59 +1195,101 @@ def generate_smart_recommendation(self, user_id):
         if preferred_books:
             if db_type == 'postgres':
                 placeholders = ','.join(['%s'] * len(preferred_books))
+                exclude_clause = ''
+                exclude_params = []
+                if exclude_ids:
+                    exclude_clause = f" AND v.id NOT IN ({','.join(['%s'] * len(exclude_ids))})"
+                    exclude_params = exclude_ids
                 c.execute(f"""
                     SELECT v.* FROM verses v
                     WHERE v.book IN ({placeholders})
                     AND v.id NOT IN (SELECT verse_id FROM likes WHERE user_id = %s)
                     AND v.id NOT IN (SELECT verse_id FROM saves WHERE user_id = %s)
+                    {exclude_clause}
                     ORDER BY RANDOM()
                     LIMIT 1
-                """, (*preferred_books, user_id, user_id))
+                """, (*preferred_books, user_id, user_id, *exclude_params))
             else:
                 placeholders = ','.join('?' for _ in preferred_books)
+                exclude_clause = ''
+                exclude_params = []
+                if exclude_ids:
+                    exclude_clause = f" AND v.id NOT IN ({','.join('?' for _ in exclude_ids)})"
+                    exclude_params = exclude_ids
                 c.execute(f"""
                     SELECT v.* FROM verses v
                     WHERE v.book IN ({placeholders})
                     AND v.id NOT IN (SELECT verse_id FROM likes WHERE user_id = ?)
                     AND v.id NOT IN (SELECT verse_id FROM saves WHERE user_id = ?)
+                    {exclude_clause}
                     ORDER BY RANDOM()
                     LIMIT 1
-                """, (*preferred_books, user_id, user_id))
+                """, (*preferred_books, user_id, user_id, *exclude_params))
         else:
             if db_type == 'postgres':
-                c.execute("""
+                exclude_clause = ''
+                exclude_params = []
+                if exclude_ids:
+                    exclude_clause = f" AND id NOT IN ({','.join(['%s'] * len(exclude_ids))})"
+                    exclude_params = exclude_ids
+                c.execute(f"""
                     SELECT * FROM verses 
                     WHERE id NOT IN (SELECT verse_id FROM likes WHERE user_id = %s)
+                    AND id NOT IN (SELECT verse_id FROM saves WHERE user_id = %s)
+                    {exclude_clause}
                     ORDER BY RANDOM() LIMIT 1
-                """, (user_id,))
+                """, (user_id, user_id, *exclude_params))
             else:
-                c.execute("""
+                exclude_clause = ''
+                exclude_params = []
+                if exclude_ids:
+                    exclude_clause = f" AND id NOT IN ({','.join('?' for _ in exclude_ids)})"
+                    exclude_params = exclude_ids
+                c.execute(f"""
                     SELECT * FROM verses 
                     WHERE id NOT IN (SELECT verse_id FROM likes WHERE user_id = ?)
+                    AND id NOT IN (SELECT verse_id FROM saves WHERE user_id = ?)
+                    {exclude_clause}
                     ORDER BY RANDOM() LIMIT 1
-                """, (user_id,))
+                """, (user_id, user_id, *exclude_params))
         
         row = c.fetchone()
         
-        if row:
-            try:
-                return {
-                    "id": row['id'], 
-                    "ref": row['reference'], 
-                    "text": row['text'],
-                    "trans": row['translation'], 
-                    "book": row['book'],
-                    "reason": f"Because you like {row['book']}" if preferred_books else "Recommended for you"
-                }
-            except (TypeError, KeyError):
-                return {
-                    "id": row[0], 
-                    "ref": row[1], 
-                    "text": row[2],
-                    "trans": row[3], 
-                    "book": row[6],
-                    "reason": f"Because you like {row[6]}" if preferred_books else "Recommended for you"
-                }
+            if row:
+                def pick_reason(book_name=None, preferred=False):
+                    if preferred and book_name:
+                        options = [
+                            f"Because you like {book_name}",
+                            f"A fresh passage from {book_name}",
+                            f"Something uplifting from {book_name}",
+                            f"More wisdom in {book_name}"
+                        ]
+                    else:
+                        options = [
+                            "Recommended for you",
+                            "A fresh verse for today",
+                            "Something to reflect on",
+                            "A new verse to explore"
+                        ]
+                    return random.choice(options)
+                try:
+                    return {
+                        "id": row['id'], 
+                        "ref": row['reference'], 
+                        "text": row['text'],
+                        "trans": row['translation'], 
+                        "book": row['book'],
+                        "reason": pick_reason(row['book'], bool(preferred_books))
+                    }
+                except (TypeError, KeyError):
+                    return {
+                        "id": row[0], 
+                        "ref": row[1], 
+                        "text": row[2],
+                        "trans": row[3], 
+                        "book": row[6],
+                        "reason": pick_reason(row[6], bool(preferred_books))
+                    }
         return None
     except Exception as e:
         logger.error(f"Recommendation error: {e}")
@@ -2333,7 +2405,9 @@ def get_daily_challenge():
     c = get_cursor(conn, db_type)
     period_key = get_challenge_period_key()
     period_start, period_end = get_hour_window()
-    goal = 2
+    challenge = pick_hourly_challenge(session['user_id'], period_key)
+    goal = challenge.get('goal', 2)
+    action = challenge.get('action', 'save')
 
     try:
         if db_type == 'postgres':
@@ -2352,7 +2426,7 @@ def get_daily_challenge():
                 SELECT COUNT(*) AS count
                 FROM daily_actions
                 WHERE user_id = %s AND action = %s AND event_date = %s
-            """, (session['user_id'], 'save', period_key))
+            """, (session['user_id'], action, period_key))
             row = c.fetchone()
             progress = int(row['count'] if row and isinstance(row, dict) else (row[0] if row else 0))
         else:
@@ -2371,7 +2445,7 @@ def get_daily_challenge():
                 SELECT COUNT(*)
                 FROM daily_actions
                 WHERE user_id = ? AND action = ? AND event_date = ?
-            """, (session['user_id'], 'save', period_key))
+            """, (session['user_id'], action, period_key))
             row = c.fetchone()
             progress = int(row[0] if row else 0)
 
@@ -2379,10 +2453,10 @@ def get_daily_challenge():
         progress = min(progress, goal)
         xp_reward = get_hourly_xp_reward(session['user_id'], period_key)
         return jsonify({
-            "id": "save2",
-            "text": "Save 2 verses to your library",
+            "id": challenge.get('id', 'save2'),
+            "text": challenge.get('text', 'Save 2 verses to your library'),
             "goal": goal,
-            "type": "save",
+            "type": action,
             "date": period_key,
             "challenge_id": period_key,
             "expires_at": period_end.isoformat(),
@@ -2484,6 +2558,9 @@ def like_verse():
                 liked = True
         
         conn.commit()
+
+        if liked:
+            record_daily_action(session['user_id'], 'like', verse_id)
         
         if liked:
             rec = generator.generate_smart_recommendation(session['user_id'])
@@ -2795,6 +2872,109 @@ def get_recommendations():
         return jsonify({"recommendations": [rec]})
     return jsonify({"recommendations": []})
 
+@app.route('/api/mood/<mood>')
+def get_mood_recommendation(mood):
+    if 'user_id' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    is_banned, _, _ = check_ban_status(session['user_id'])
+    if is_banned:
+        return jsonify({"error": "banned"}), 403
+
+    conn, db_type = get_db()
+    c = get_cursor(conn, db_type)
+    try:
+        mood_key = str(mood or '').strip().lower()
+        keywords = MOOD_KEYWORDS.get(mood_key) or MOOD_KEYWORDS.get('peace', [])
+        exclude_raw = request.args.get('exclude', '')
+        exclude_ids = []
+        for raw in str(exclude_raw).split(','):
+            raw = raw.strip()
+            if raw.isdigit():
+                exclude_ids.append(int(raw))
+        exclude_ids = list(dict.fromkeys(exclude_ids))
+        row = None
+        if keywords:
+            if db_type == 'postgres':
+                clauses = " OR ".join(["text ILIKE %s"] * len(keywords))
+                params = [f"%{k}%" for k in keywords]
+                exclude_clause = ''
+                if exclude_ids:
+                    exclude_clause = f" AND id NOT IN ({','.join(['%s'] * len(exclude_ids))})"
+                    params.extend(exclude_ids)
+                c.execute(f"""
+                    SELECT id, reference, text, translation, book
+                    FROM verses
+                    WHERE {clauses}
+                    {exclude_clause}
+                    ORDER BY RANDOM()
+                    LIMIT 1
+                """, params)
+            else:
+                clauses = " OR ".join(["text LIKE ?"] * len(keywords))
+                params = [f"%{k}%" for k in keywords]
+                exclude_clause = ''
+                if exclude_ids:
+                    exclude_clause = f" AND id NOT IN ({','.join('?' for _ in exclude_ids)})"
+                    params.extend(exclude_ids)
+                c.execute(f"""
+                    SELECT id, reference, text, translation, book
+                    FROM verses
+                    WHERE {clauses}
+                    {exclude_clause}
+                    ORDER BY RANDOM()
+                    LIMIT 1
+                """, params)
+            row = c.fetchone()
+
+        if not row:
+            if db_type == 'postgres':
+                if exclude_ids:
+                    c.execute(f"""
+                        SELECT id, reference, text, translation, book
+                        FROM verses
+                        WHERE id NOT IN ({','.join(['%s'] * len(exclude_ids))})
+                        ORDER BY RANDOM() LIMIT 1
+                    """, exclude_ids)
+                else:
+                    c.execute("SELECT id, reference, text, translation, book FROM verses ORDER BY RANDOM() LIMIT 1")
+            else:
+                if exclude_ids:
+                    c.execute(f"""
+                        SELECT id, reference, text, translation, book
+                        FROM verses
+                        WHERE id NOT IN ({','.join('?' for _ in exclude_ids)})
+                        ORDER BY RANDOM() LIMIT 1
+                    """, exclude_ids)
+                else:
+                    c.execute("SELECT id, reference, text, translation, book FROM verses ORDER BY RANDOM() LIMIT 1")
+            row = c.fetchone()
+
+        if not row:
+            return jsonify({"error": "No verses found"}), 404
+
+        try:
+            return jsonify({
+                "id": row['id'],
+                "ref": row['reference'],
+                "text": row['text'],
+                "trans": row['translation'],
+                "book": row['book']
+            })
+        except (TypeError, KeyError):
+            return jsonify({
+                "id": row[0],
+                "ref": row[1],
+                "text": row[2],
+                "trans": row[3],
+                "book": row[4] if len(row) > 4 else ''
+            })
+    except Exception as e:
+        logger.error(f"Mood recommendation error: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
 @app.route('/api/generate-recommendation', methods=['POST'])
 def generate_rec():
     if 'user_id' not in session:
@@ -2804,7 +2984,9 @@ def generate_rec():
     if is_banned:
         return jsonify({"error": "banned"}), 403
     
-    rec = generator.generate_smart_recommendation(session['user_id'])
+    payload = request.get_json(silent=True) or {}
+    exclude_ids = payload.get('exclude_ids') if isinstance(payload, dict) else None
+    rec = generator.generate_smart_recommendation(session['user_id'], exclude_ids=exclude_ids)
     if rec:
         return jsonify({"success": True, "recommendation": rec})
     return jsonify({"success": False})
@@ -3082,6 +3264,8 @@ def post_comment():
             comment_id = c.lastrowid
         
         conn.commit()
+        if comment_id:
+            record_daily_action(session['user_id'], 'comment', comment_id)
         logger.info(f"[DEBUG] Comment posted successfully, id={comment_id}")
         return jsonify({"success": True, "id": comment_id})
     except Exception as e:
@@ -3202,15 +3386,20 @@ def post_community_message():
     
     try:
         if db_type == 'postgres':
-            c.execute("INSERT INTO community_messages (user_id, text, timestamp, google_name, google_picture) VALUES (%s, %s, %s, %s, %s)",
+            c.execute("INSERT INTO community_messages (user_id, text, timestamp, google_name, google_picture) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                       (session['user_id'], text, datetime.now().isoformat(), 
                        session.get('user_name'), session.get('user_picture')))
+            result = c.fetchone()
+            message_id = result['id'] if result else None
         else:
             c.execute("INSERT INTO community_messages (user_id, text, timestamp, google_name, google_picture) VALUES (?, ?, ?, ?, ?)",
                       (session['user_id'], text, datetime.now().isoformat(), 
                        session.get('user_name'), session.get('user_picture')))
+            message_id = c.lastrowid
         
         conn.commit()
+        if message_id:
+            record_daily_action(session['user_id'], 'comment', message_id)
         return jsonify({"success": True})
     except Exception as e:
         logger.error(f"Post community error: {e}")
