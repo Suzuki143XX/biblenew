@@ -2125,6 +2125,12 @@
             }
         }
 
+        @media (min-width: 1024px) {
+            .profile-info-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
         .profile-info-card {
             background: var(--surface);
             border-radius: 16px;
@@ -2145,6 +2151,14 @@
             font-size: 18px;
             font-weight: 700;
             color: var(--primary);
+        }
+
+        .profile-info-sub {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--text-tertiary);
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
         }
 
         /* Profile Add-ons */
@@ -3348,6 +3362,11 @@
                         <div class="profile-info-label">Time on Site</div>
                         <div class="profile-info-value" id="timeOnSite" style="color: var(--success);">0m 0s</div>
                     </div>
+                    <div class="profile-info-card">
+                        <div class="profile-info-label">XP</div>
+                        <div class="profile-info-value" id="profileXp">0 XP</div>
+                        <div class="profile-info-sub" id="profileLevel">Level 1</div>
+                    </div>
                 </div>
 
                 <div class="stats-grid">
@@ -3910,6 +3929,7 @@
         let autoRecInterval = null;
         let verseCheckInterval = null;
         let presencePingInterval = null;
+        let challengeRefreshInterval = null;
         let notificationPollInterval = null;
         const VERSE_POLL_INTERVAL_MS = 5000;
         const STATUS_REFRESH_INTERVAL_MS = 15000;
@@ -3987,6 +4007,7 @@
             await loadBiblePicks(true);
             loadVerseOfDay();
             renderRecHistory();
+            updateXpDisplay();
             updateOnlineUsers();
             updateTabThemeClass(currentTab);
             switchCommentsView('verse');
@@ -5091,6 +5112,7 @@
             loadAchievements(data);
             loadFavoriteBooks();
             loadVerseHistory();
+            updateXpDisplay();
         }
 
         // === PROFILE ADD-ONS ===
@@ -5222,7 +5244,11 @@
             ACHIEVEMENTS.forEach(ach => {
                 if (!unlocked.includes(ach.id) && ach.check(stats)) {
                     unlocked.push(ach.id);
-                    if (settings.notifications) showToast(`🏆 Unlocked: ${ach.name}!`);
+                    const awarded = awardXp(ACHIEVEMENT_XP, 'achievement', ach.id);
+                    if (settings.notifications) {
+                        showToast(`🏆 Unlocked: ${ach.name}! +${ACHIEVEMENT_XP} XP`);
+                    }
+                    if (awarded) AudioSys.playSuccess();
                 }
             });
             localStorage.setItem('unlockedAchievements', JSON.stringify(unlocked));
@@ -5367,8 +5393,56 @@
 
         // === DISCOVER TAB FEATURES ===
         
-        // Daily Challenge System (database-backed)
+        // Daily Challenge + XP System
         const DAILY_CHALLENGE_TOAST_KEY = 'dailyChallengeCompleteDate';
+        const XP_STORAGE_KEY = 'bibleXpState';
+        const ACHIEVEMENT_XP = 750;
+
+        function getXpState() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(XP_STORAGE_KEY) || '{}');
+                return {
+                    xp: Number(saved.xp || 0),
+                    claimedChallenges: saved.claimedChallenges || {},
+                    claimedAchievements: saved.claimedAchievements || {}
+                };
+            } catch (_) {
+                return { xp: 0, claimedChallenges: {}, claimedAchievements: {} };
+            }
+        }
+
+        function saveXpState(state) {
+            localStorage.setItem(XP_STORAGE_KEY, JSON.stringify(state));
+        }
+
+        function getLevelFromXp(xp) {
+            const level = Math.floor(xp / 1000) + 1;
+            return { level };
+        }
+
+        function updateXpDisplay() {
+            const state = getXpState();
+            const xpEl = document.getElementById('profileXp');
+            const levelEl = document.getElementById('profileLevel');
+            const { level } = getLevelFromXp(state.xp);
+            if (xpEl) xpEl.textContent = `${state.xp} XP`;
+            if (levelEl) levelEl.textContent = `Level ${level}`;
+        }
+
+        function awardXp(amount, type, key) {
+            const state = getXpState();
+            if (type === 'challenge') {
+                if (state.claimedChallenges[key]) return false;
+                state.claimedChallenges[key] = true;
+            } else if (type === 'achievement') {
+                if (state.claimedAchievements[key]) return false;
+                state.claimedAchievements[key] = true;
+            }
+            state.xp += Math.max(0, Number(amount || 0));
+            saveXpState(state);
+            updateXpDisplay();
+            return true;
+        }
 
         function trackDailyAction(action, verseId) {
             // Keep signature for existing call sites; server tracks save actions.
@@ -5382,6 +5456,8 @@
             if (!challengeEl) return;
             challengeEl.style.display = 'block';
             await updateChallengeProgress();
+            if (challengeRefreshInterval) clearInterval(challengeRefreshInterval);
+            challengeRefreshInterval = setInterval(updateChallengeProgress, 60000);
         }
 
         async function updateChallengeProgress() {
@@ -5390,7 +5466,11 @@
                 const data = await res.json();
                 if (!res.ok || data.error) return;
 
-                document.getElementById('challengeText').textContent = data.text || 'Save 2 verses to your library';
+                const xpReward = Number(data.xp_reward || 0);
+                const challengeText = data.text || 'Save 2 verses to your library';
+                document.getElementById('challengeText').textContent = xpReward
+                    ? `${challengeText} • ${xpReward} XP`
+                    : challengeText;
                 document.getElementById('challengeGoal').textContent = data.goal || 2;
                 const progress = Math.max(0, Number(data.progress || 0));
                 const goal = Math.max(1, Number(data.goal || 2));
@@ -5402,11 +5482,14 @@
                 if (progressEl) progressEl.textContent = String(Math.min(progress, goal));
 
                 if (data.completed) {
-                    const today = String(data.date || new Date().toISOString().slice(0, 10));
-                    if (localStorage.getItem(DAILY_CHALLENGE_TOAST_KEY) !== today) {
-                        localStorage.setItem(DAILY_CHALLENGE_TOAST_KEY, today);
-                        showToast('🎯 Daily Challenge Complete! +100 XP');
-                        AudioSys.playSuccess();
+                    const periodKey = String(data.challenge_id || data.date || new Date().toISOString().slice(0, 13));
+                    if (localStorage.getItem(DAILY_CHALLENGE_TOAST_KEY) !== periodKey) {
+                        localStorage.setItem(DAILY_CHALLENGE_TOAST_KEY, periodKey);
+                        const awarded = awardXp(xpReward || 100, 'challenge', periodKey);
+                        if (awarded) {
+                            showToast(`🎯 Challenge Complete! +${xpReward || 100} XP`);
+                            AudioSys.playSuccess();
+                        }
                     }
                 }
             } catch (_) {
@@ -6343,10 +6426,14 @@
         }
 
         function updateOnlineUsers() {
-            // Simulated online count
-            const baseCount = 1;
-            const random = Math.floor(Math.random() * 5);
-            document.getElementById('onlineCount').textContent = baseCount + random;
+            fetch('/api/presence/online')
+                .then(res => res.json())
+                .then(data => {
+                    const count = Number(data.count || 0);
+                    const el = document.getElementById('onlineCount');
+                    if (el) el.textContent = String(Math.max(1, count));
+                })
+                .catch(() => {});
         }
 
         // Simulate online users updating
