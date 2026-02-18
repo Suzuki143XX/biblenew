@@ -3225,7 +3225,7 @@
                         <div class="about-slider-track" id="aboutSliderTrack">
                             <div class="about-slide">
                                 <div class="about-video-frame" id="aboutFrame0" onclick="toggleAboutPlayback()">
-                                    <video class="about-video" id="aboutVideo0" autoplay loop playsinline preload="metadata">
+                                    <video class="about-video" id="aboutVideo0" loop playsinline muted preload="none">
                                         <source src="/media/videos/1.mp4?v=20260216-1100" type="video/mp4">
                                     </video>
                                     <div class="about-paused-indicator">&#9654; Paused</div>
@@ -3233,7 +3233,7 @@
                             </div>
                             <div class="about-slide">
                                 <div class="about-video-frame" id="aboutFrame1" onclick="toggleAboutPlayback()">
-                                    <video class="about-video" id="aboutVideo1" autoplay loop playsinline preload="metadata">
+                                    <video class="about-video" id="aboutVideo1" loop playsinline muted preload="none">
                                         <source src="/media/videos/2.mp4?v=20260216-1100" type="video/mp4">
                                     </video>
                                     <div class="about-paused-indicator">&#9654; Paused</div>
@@ -3745,8 +3745,8 @@
             
             // Initialize new features
             initDailyChallenge();
-            loadBibleBooks();
-            loadBiblePicks(true);
+            await loadBibleBooks();
+            await loadBiblePicks(true);
             loadVerseOfDay();
             renderRecHistory();
             updateOnlineUsers();
@@ -5194,8 +5194,9 @@
 
                 const picks = Array.isArray(data.picks) ? data.picks : [];
                 renderBiblePicks(picks);
-                metaEl.textContent = picks.length
-                    ? `${picks.length} popular selections ready.`
+                const total = biblePickState.picks.length;
+                metaEl.textContent = total
+                    ? `${total} selections ready.`
                     : 'No selections found.';
             } catch (_) {
                 metaEl.textContent = 'Network error while loading selections.';
@@ -5206,7 +5207,38 @@
             const selectEl = document.getElementById('biblePickSelect');
             if (!selectEl) return;
 
-            biblePickState.picks = Array.isArray(picks) ? picks : [];
+            const sourcePicks = Array.isArray(picks) ? picks : [];
+            const books = Array.isArray(bibleReaderState.books) ? bibleReaderState.books : [];
+            const combined = [];
+            const used = new Set();
+
+            if (books.length) {
+                books.forEach(book => {
+                    const bookName = String(book.name || book.id || '').trim();
+                    if (!bookName) return;
+                    let found = null;
+                    for (let i = 0; i < sourcePicks.length; i++) {
+                        if (used.has(i)) continue;
+                        const ref = String(sourcePicks[i].reference || sourcePicks[i].ref || '').trim();
+                        const parsed = parsePickReference(ref);
+                        const pickBook = parsed ? parsed.book : ref.split(' ')[0];
+                        if (bookMatchesName(pickBook, bookName)) {
+                            found = sourcePicks[i];
+                            used.add(i);
+                            break;
+                        }
+                    }
+                    if (found) {
+                        combined.push(found);
+                    } else {
+                        combined.push({ reference: `${bookName} 1`, title: 'Chapter 1', reason: 'Start here' });
+                    }
+                });
+            } else {
+                combined.push(...sourcePicks);
+            }
+
+            biblePickState.picks = combined;
             selectEl.innerHTML = '<option value=\"\">Select a popular reading...</option>';
 
             biblePickState.picks.forEach((p, idx) => {
@@ -5241,6 +5273,20 @@
                 book: match[1].trim(),
                 chapter: parseInt(match[2], 10) || 1
             };
+        }
+
+        function normalizeBookName(name) {
+            return String(name || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+        }
+
+        function bookMatchesName(a, b) {
+            const left = normalizeBookName(a);
+            const right = normalizeBookName(b);
+            if (!left || !right) return false;
+            if (left === right) return true;
+            if (left.endsWith('s') && left.slice(0, -1) === right) return true;
+            if (right.endsWith('s') && right.slice(0, -1) === left) return true;
+            return left.includes(right) || right.includes(left);
         }
 
         function applyPickToReader(pick) {
@@ -5313,6 +5359,9 @@
                     selectEl.selectedIndex = 0;
                 }
                 if (metaEl) metaEl.textContent = `Loaded ${selectEl.options.length} books.`;
+                if (biblePickState.picks.length) {
+                    renderBiblePicks(biblePickState.picks);
+                }
             } catch (_) {
                 if (metaEl) metaEl.textContent = 'Network error while loading books.';
             }
@@ -5755,16 +5804,22 @@
         function syncAboutVideoPlayback() {
             const videos = getAboutVideos();
             if (currentTab !== 'about') {
-                videos.forEach(v => { if (!v.paused) v.pause(); });
+                videos.forEach(v => {
+                    v.muted = true;
+                    if (!v.paused) v.pause();
+                });
                 updateAboutPausedOverlay();
                 return;
             }
             videos.forEach((v, i) => {
                 if (i === aboutSlideIndex) {
+                    v.muted = false;
+                    v.volume = aboutVolume;
                     if (v.readyState < 2) v.load();
                     const p = v.play();
                     if (p && typeof p.catch === 'function') p.catch(() => {});
                 } else {
+                    v.muted = true;
                     if (!v.paused) v.pause();
                 }
             });
@@ -5772,7 +5827,10 @@
         }
 
         function pauseAboutPlayback() {
-            getAboutVideos().forEach(v => { if (!v.paused) v.pause(); });
+            getAboutVideos().forEach(v => {
+                v.muted = true;
+                if (!v.paused) v.pause();
+            });
             updateAboutPausedOverlay();
             updateAboutProgressBars();
             updateAboutNowPlaying();
@@ -5786,6 +5844,8 @@
             const activeVideo = getAboutVideos()[aboutSlideIndex];
             if (!activeVideo) return;
             if (activeVideo.paused) {
+                activeVideo.muted = false;
+                activeVideo.volume = aboutVolume;
                 const p = activeVideo.play();
                 if (p && typeof p.catch === 'function') p.catch(() => {});
             } else {
@@ -5809,6 +5869,7 @@
             aboutVideoErrorCount = 0;
             videos.forEach((v, idx) => {
                 v.volume = aboutVolume;
+                if (currentTab !== 'about') v.muted = true;
                 v.addEventListener('play', updateAboutPausedOverlay);
                 v.addEventListener('pause', updateAboutPausedOverlay);
                 v.addEventListener('ended', updateAboutPausedOverlay);
