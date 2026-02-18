@@ -10,6 +10,7 @@ import json
 import random
 import logging
 from datetime import datetime, timedelta
+import hashlib
 from functools import wraps
 from urllib.parse import quote
 
@@ -33,7 +34,7 @@ def make_session_permanent():
 
 # Configuration
 app.secret_key = os.environ.get('SECRET_KEY', 'eK8#mP2$vL9@nQ4&wX5*fJ7!hR3(tY6)bU1$cI0~pO8+lA2=zS9')
-PUBLIC_URL = os.environ.get('RENDER_EXTERNAL_URL', 'https://aibible.onrender.com')
+PUBLIC_URL = os.environ.get('PUBLIC_URL') or os.environ.get('RENDER_EXTERNAL_URL') or 'https://aibible.onrender.com'
 
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '420462376171-neu8kbc7cm1geu2ov70gd10fh9e2210i.apps.googleusercontent.com')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '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')
@@ -131,6 +132,15 @@ FALLBACK_BOOKS = [
     {"id": "JUD", "name": "Jude"},
     {"id": "REV", "name": "Revelation"},
 ]
+
+def get_public_url():
+    base = os.environ.get('PUBLIC_URL') or os.environ.get('RENDER_EXTERNAL_URL')
+    if base:
+        return base.rstrip('/')
+    try:
+        return request.url_root.rstrip('/')
+    except Exception:
+        return PUBLIC_URL.rstrip('/')
 
 def get_db():
     """Get database connection - PostgreSQL for Render, SQLite for local"""
@@ -587,11 +597,25 @@ def migrate_db():
 init_db()
 migrate_db()
 
+def get_challenge_period_key():
+    now = datetime.now()
+    return now.strftime("%Y-%m-%d-%H")
+
+def get_hour_window():
+    now = datetime.now()
+    start = now.replace(minute=0, second=0, microsecond=0)
+    return start, start + timedelta(hours=1)
+
+def get_hourly_xp_reward(user_id, period_key):
+    seed = f"{user_id}:{period_key}"
+    value = int(hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8], 16)
+    return 100 + (value % 401)
+
 def record_daily_action(user_id, action, verse_id=None):
-    """Persist unique per-day user actions used by Daily Challenge."""
+    """Persist unique per-hour user actions used by Hourly Challenge."""
     conn, db_type = get_db()
     c = get_cursor(conn, db_type)
-    today = datetime.now().date().isoformat()
+    period_key = get_challenge_period_key()
     now = datetime.now().isoformat()
 
     try:
@@ -600,12 +624,12 @@ def record_daily_action(user_id, action, verse_id=None):
                 INSERT INTO daily_actions (user_id, action, verse_id, event_date, timestamp)
                 VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, action, verse_id, event_date) DO NOTHING
-            """, (user_id, action, verse_id, today, now))
+            """, (user_id, action, verse_id, period_key, now))
         else:
             c.execute("""
                 INSERT OR IGNORE INTO daily_actions (user_id, action, verse_id, event_date, timestamp)
                 VALUES (?, ?, ?, ?, ?)
-            """, (user_id, action, verse_id, today, now))
+            """, (user_id, action, verse_id, period_key, now))
         conn.commit()
     except Exception as e:
         logger.warning(f"Daily action record failed: {e}")
@@ -1463,7 +1487,7 @@ def google_login():
     try:
         google_provider_cfg = requests.get(GOOGLE_DISCOVERY_URL).json()
         authorization_endpoint = google_provider_cfg["authorization_endpoint"]
-        callback_url = PUBLIC_URL + "/callback"
+        callback_url = get_public_url() + "/callback"
         state = secrets.token_urlsafe(16)
         session['oauth_state'] = state
         
@@ -1496,7 +1520,7 @@ def callback():
     try:
         google_provider_cfg = requests.get(GOOGLE_DISCOVERY_URL).json()
         token_endpoint = google_provider_cfg["token_endpoint"]
-        callback_url = PUBLIC_URL + "/callback"
+        callback_url = get_public_url() + "/callback"
         
         token_response = requests.post(
             token_endpoint,
@@ -2307,7 +2331,8 @@ def get_daily_challenge():
 
     conn, db_type = get_db()
     c = get_cursor(conn, db_type)
-    today = datetime.now().date().isoformat()
+    period_key = get_challenge_period_key()
+    period_start, period_end = get_hour_window()
     goal = 2
 
     try:
@@ -2327,7 +2352,7 @@ def get_daily_challenge():
                 SELECT COUNT(*) AS count
                 FROM daily_actions
                 WHERE user_id = %s AND action = %s AND event_date = %s
-            """, (session['user_id'], 'save', today))
+            """, (session['user_id'], 'save', period_key))
             row = c.fetchone()
             progress = int(row['count'] if row and isinstance(row, dict) else (row[0] if row else 0))
         else:
@@ -2346,18 +2371,22 @@ def get_daily_challenge():
                 SELECT COUNT(*)
                 FROM daily_actions
                 WHERE user_id = ? AND action = ? AND event_date = ?
-            """, (session['user_id'], 'save', today))
+            """, (session['user_id'], 'save', period_key))
             row = c.fetchone()
             progress = int(row[0] if row else 0)
 
         conn.commit()
         progress = min(progress, goal)
+        xp_reward = get_hourly_xp_reward(session['user_id'], period_key)
         return jsonify({
             "id": "save2",
             "text": "Save 2 verses to your library",
             "goal": goal,
             "type": "save",
-            "date": today,
+            "date": period_key,
+            "challenge_id": period_key,
+            "expires_at": period_end.isoformat(),
+            "xp_reward": xp_reward,
             "progress": progress,
             "completed": progress >= goal
         })
@@ -2484,7 +2513,7 @@ def save_verse():
     
     try:
         now = datetime.now().isoformat()
-        today = datetime.now().date().isoformat()
+        period_key = get_challenge_period_key()
         if db_type == 'postgres':
             c.execute("SELECT id FROM saves WHERE user_id = %s AND verse_id = %s", (session['user_id'], verse_id))
             if c.fetchone():
@@ -2497,7 +2526,7 @@ def save_verse():
                     INSERT INTO daily_actions (user_id, action, verse_id, event_date, timestamp)
                     VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (user_id, action, verse_id, event_date) DO NOTHING
-                """, (session['user_id'], 'save', verse_id, today, now))
+                """, (session['user_id'], 'save', verse_id, period_key, now))
                 saved = True
         else:
             c.execute("SELECT id FROM saves WHERE user_id = ? AND verse_id = ?", (session['user_id'], verse_id))
@@ -2510,7 +2539,7 @@ def save_verse():
                 c.execute("""
                     INSERT OR IGNORE INTO daily_actions (user_id, action, verse_id, event_date, timestamp)
                     VALUES (?, ?, ?, ?, ?)
-                """, (session['user_id'], 'save', verse_id, today, now))
+                """, (session['user_id'], 'save', verse_id, period_key, now))
                 saved = True
         
         conn.commit()
@@ -3564,6 +3593,53 @@ def presence_ping():
             except:
                 pass
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/presence/online')
+def presence_online():
+    if 'user_id' not in session:
+        return jsonify({"count": 0}), 401
+    conn = None
+    try:
+        conn, db_type = get_db()
+        c = get_cursor(conn, db_type)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS user_presence (
+                user_id INTEGER PRIMARY KEY,
+                last_seen TEXT,
+                last_path TEXT,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        if db_type == 'postgres':
+            c.execute("SELECT user_id, last_seen FROM user_presence")
+            rows = c.fetchall()
+        else:
+            c.execute("SELECT user_id, last_seen FROM user_presence")
+            rows = c.fetchall()
+
+        now = datetime.now()
+        window = now - timedelta(minutes=3)
+        count = 0
+        for row in rows:
+            try:
+                last_seen = row['last_seen'] if isinstance(row, dict) or hasattr(row, 'keys') else row[1]
+                if not last_seen:
+                    continue
+                last_dt = datetime.fromisoformat(str(last_seen))
+                if last_dt >= window:
+                    count += 1
+            except Exception:
+                continue
+        conn.close()
+        return jsonify({"count": count})
+    except Exception as e:
+        logger.error(f"Presence online error: {e}")
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+        return jsonify({"count": 0}), 500
 
 @app.route('/api/notifications')
 def get_notifications():
