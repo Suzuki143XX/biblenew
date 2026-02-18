@@ -2255,6 +2255,22 @@
             margin-bottom: 10px;
         }
 
+        .bible-picks-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .bible-picks-select {
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            color: var(--text);
+            padding: 10px 12px;
+            font-size: 13px;
+        }
+
         .bible-picks-list {
             display: grid;
             gap: 10px;
@@ -2322,7 +2338,7 @@
         }
 
         .bible-pick-detail.active {
-            max-height: 220px;
+            max-height: 140px;
             opacity: 1;
             transform: translateY(0);
             padding: 12px;
@@ -2336,6 +2352,105 @@
         .bible-pick-detail-meta {
             font-size: 12px;
             color: var(--text-secondary);
+        }
+
+        .bible-reader-card {
+            margin-top: 16px;
+            padding: 16px;
+        }
+
+        .bible-reader-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .bible-reader-title {
+            font-size: 14px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--primary);
+        }
+
+        .bible-reader-current {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .bible-reader-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .bible-reader-select,
+        .bible-reader-input {
+            background: var(--surface);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            color: var(--text);
+            padding: 10px 12px;
+            font-size: 13px;
+        }
+
+        .bible-reader-select {
+            flex: 1;
+            min-width: 180px;
+        }
+
+        .bible-reader-input {
+            width: 90px;
+        }
+
+        .bible-reader-btn {
+            padding: 9px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--glass-border);
+            background: var(--primary);
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .bible-reader-btn.secondary {
+            background: var(--surface);
+            color: var(--text);
+        }
+
+        .bible-reader-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .bible-reader-content {
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px;
+            background: rgba(0,0,0,0.2);
+            max-height: 320px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .reader-verse {
+            margin-bottom: 8px;
+        }
+
+        .reader-verse span {
+            display: inline-block;
+            min-width: 28px;
+            margin-right: 6px;
+            color: var(--text-tertiary);
+            font-weight: 700;
         }
 
         .quick-filters {
@@ -2797,7 +2912,11 @@
                         </div>
                     </div>
                     <div class="bible-picks-meta" id="biblePickMeta">OpenAI suggests popular Bible chapters and short ranges.</div>
-                    <div class="bible-picks-list" id="biblePickList"></div>
+                    <div class="bible-picks-row">
+                        <select class="bible-picks-select" id="biblePickSelect" onchange="onBiblePickSelect()">
+                            <option value="">Select a popular reading...</option>
+                        </select>
+                    </div>
                     <div class="bible-pick-detail" id="biblePickDetail" aria-live="polite"></div>
                 </div>
 
@@ -2864,6 +2983,22 @@
                     </div>
                     <div id="verseOfDayContent" style="font-style: italic; opacity: 0.9;">Loading...</div>
                     <div id="verseOfDayRef" style="margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--primary);"></div>
+                </div>
+
+                <div class="glass-card bible-reader-card">
+                    <div class="bible-reader-header">
+                        <div class="bible-reader-title">📘 Bible Reader</div>
+                        <div class="bible-reader-current" id="readerCurrentChapter">Chapter: —</div>
+                    </div>
+                    <div class="bible-reader-controls">
+                        <select class="bible-reader-select" id="readerBookSelect"></select>
+                        <input class="bible-reader-input" id="readerChapterInput" type="number" min="1" value="1">
+                        <button class="bible-reader-btn" type="button" onclick="loadBibleChapter()">Load</button>
+                        <button class="bible-reader-btn secondary" type="button" onclick="prevBibleChapter()">Prev</button>
+                        <button class="bible-reader-btn secondary" type="button" onclick="nextBibleChapter()">Next</button>
+                    </div>
+                    <div class="bible-reader-meta" id="readerMeta">Select a book and chapter to begin reading.</div>
+                    <div class="bible-reader-content" id="readerContent">Waiting for selection.</div>
                 </div>
             </div>
 
@@ -3648,6 +3783,8 @@
         let countdownBase = 0;
         let countdownTotal = 0;
         let countdownSyncedAt = 0;
+        let biblePickState = { picks: [] };
+        let bibleReaderState = { books: [], translation: 'web' };
         // Permanent Timer State
         let sessionStartTime = null;
         let timerInterval = null;
@@ -3694,6 +3831,7 @@
             
             // Initialize new features
             initDailyChallenge();
+            loadBibleBooks();
             loadBiblePicks(true);
             loadVerseOfDay();
             renderRecHistory();
@@ -5125,10 +5263,16 @@
         }
 
         async function loadBiblePicks(popularOnly = false) {
-            const listEl = document.getElementById('biblePickList');
+            const selectEl = document.getElementById('biblePickSelect');
             const metaEl = document.getElementById('biblePickMeta');
+            const detailEl = document.getElementById('biblePickDetail');
             const queryEl = document.getElementById('biblePickQuery');
-            if (!listEl || !metaEl) return;
+            if (!selectEl || !metaEl) return;
+
+            if (detailEl) {
+                detailEl.classList.remove('active');
+                detailEl.innerHTML = '';
+            }
 
             let topic = '';
             if (!popularOnly && queryEl) {
@@ -5162,50 +5306,113 @@
         }
 
         function renderBiblePicks(picks) {
-            const listEl = document.getElementById('biblePickList');
+            const selectEl = document.getElementById('biblePickSelect');
             const detailEl = document.getElementById('biblePickDetail');
-            if (!listEl) return;
-            if (!Array.isArray(picks) || !picks.length) {
-                listEl.innerHTML = '<div style="opacity: 0.6;">No selections yet.</div>';
+            if (!selectEl) return;
+
+            biblePickState.picks = Array.isArray(picks) ? picks : [];
+            selectEl.innerHTML = '<option value=\"\">Select a popular reading...</option>';
+
+            biblePickState.picks.forEach((p, idx) => {
+                const ref = (p.reference || p.ref || '').trim();
+                if (!ref) return;
+                const title = (p.title || '').trim();
+                const label = title ? `${ref} — ${title}` : ref;
+                const opt = document.createElement('option');
+                opt.value = String(idx);
+                opt.textContent = label;
+                selectEl.appendChild(opt);
+            });
+
+            if (detailEl) {
+                detailEl.classList.remove('active');
+                detailEl.innerHTML = '';
+            }
+        }
+
+        function onBiblePickSelect() {
+            const selectEl = document.getElementById('biblePickSelect');
+            const detailEl = document.getElementById('biblePickDetail');
+            if (!selectEl) return;
+            const idx = parseInt(selectEl.value, 10);
+            if (!Number.isFinite(idx) || !biblePickState.picks[idx]) {
                 if (detailEl) detailEl.classList.remove('active');
                 return;
             }
 
-            listEl.innerHTML = picks.map(p => {
-                const ref = (p.reference || p.ref || '').trim();
-                const title = (p.title || '').trim();
-                const reason = (p.reason || '').trim();
-                const refAttr = encodeURIComponent(ref);
-                const titleAttr = encodeURIComponent(title);
-                const reasonAttr = encodeURIComponent(reason);
-                return `
-                    <div class="bible-pick" data-ref="${refAttr}" data-title="${titleAttr}" data-reason="${reasonAttr}" onclick="selectBiblePick(this)">
-                        <div class="bible-pick-ref">${escapeHtml(ref)}</div>
-                        ${title ? `<div class="bible-pick-title">${escapeHtml(title)}</div>` : ''}
-                        ${reason ? `<div class="bible-pick-reason">${escapeHtml(reason)}</div>` : ''}
-                        <div class="bible-pick-actions">
-                            <button class="bible-pick-copy" type="button" onclick="copyBiblePick('${refAttr}'); event.stopPropagation();">Copy</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+            const pick = biblePickState.picks[idx];
+            showBiblePickDetail(pick);
+            applyPickToReader(pick);
         }
 
-        function selectBiblePick(el) {
-            if (!el) return;
+        function showBiblePickDetail(pick) {
             const detailEl = document.getElementById('biblePickDetail');
             if (!detailEl) return;
-            const ref = decodeURIComponent(el.dataset.ref || '');
-            const title = decodeURIComponent(el.dataset.title || '');
-            const reason = decodeURIComponent(el.dataset.reason || '');
+            const ref = (pick.reference || pick.ref || '').trim();
+            const title = (pick.title || '').trim();
+            const reason = (pick.reason || '').trim();
+            const refEncoded = encodeURIComponent(ref);
 
             detailEl.innerHTML = `
                 <div class="bible-pick-detail-title">${escapeHtml(ref || 'Selection')}</div>
                 ${title ? `<div class="bible-pick-title">${escapeHtml(title)}</div>` : ''}
                 ${reason ? `<div class="bible-pick-detail-meta">${escapeHtml(reason)}</div>` : ''}
+                <div class="bible-pick-actions">
+                    <button class="bible-pick-copy" type="button" onclick="copyBiblePick('${refEncoded}')">Copy</button>
+                </div>
             `;
             detailEl.classList.add('active');
             detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function parsePickReference(ref) {
+            if (!ref) return null;
+            const match = ref.match(/^(.+?)\\s+(\\d+)(?:\\s*[-–]\\s*(\\d+))?$/);
+            if (!match) return null;
+            return {
+                book: match[1].trim(),
+                chapter: parseInt(match[2], 10) || 1
+            };
+        }
+
+        function applyPickToReader(pick) {
+            if (!pick) return;
+            const ref = (pick.reference || pick.ref || '').trim();
+            const parsed = parsePickReference(ref);
+            if (!parsed) return;
+
+            const selectEl = document.getElementById('readerBookSelect');
+            const chapterEl = document.getElementById('readerChapterInput');
+            if (chapterEl) {
+                chapterEl.value = String(parsed.chapter || 1);
+            }
+            if (selectEl) {
+                const bookLower = parsed.book.toLowerCase();
+                const match = bibleReaderState.books.find(b => {
+                    const name = String(b.name || '').toLowerCase();
+                    const id = String(b.id || '').toLowerCase();
+                    return (
+                        name === bookLower ||
+                        id === bookLower ||
+                        name.includes(bookLower) ||
+                        bookLower.includes(name)
+                    );
+                });
+                if (match) {
+                    selectEl.value = match.name || match.id;
+                } else {
+                    let opt = Array.from(selectEl.options).find(o => o.value === parsed.book);
+                    if (!opt) {
+                        opt = document.createElement('option');
+                        opt.value = parsed.book;
+                        opt.textContent = parsed.book;
+                        selectEl.prepend(opt);
+                    }
+                    selectEl.value = parsed.book;
+                }
+            }
+
+            loadBibleChapter();
         }
 
         function copyBiblePick(encodedRef) {
@@ -5215,6 +5422,110 @@
                 navigator.clipboard.writeText(ref).catch(() => {});
             }
             showToast(`Copied: ${ref}`);
+        }
+
+        async function loadBibleBooks() {
+            const selectEl = document.getElementById('readerBookSelect');
+            const metaEl = document.getElementById('readerMeta');
+            if (!selectEl) return;
+
+            if (metaEl) metaEl.textContent = 'Loading Bible books...';
+            try {
+                const res = await fetch('/api/bible/books');
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    if (metaEl) metaEl.textContent = 'Unable to load Bible books.';
+                    return;
+                }
+
+                bibleReaderState.books = Array.isArray(data.books) ? data.books : [];
+                bibleReaderState.translation = data.translation_id || data.translation || 'web';
+                selectEl.innerHTML = '';
+                bibleReaderState.books.forEach(book => {
+                    const opt = document.createElement('option');
+                    opt.value = book.name || book.id;
+                    opt.textContent = book.name || book.id;
+                    selectEl.appendChild(opt);
+                });
+                if (selectEl.options.length) {
+                    selectEl.selectedIndex = 0;
+                }
+                if (metaEl) metaEl.textContent = `Loaded ${selectEl.options.length} books.`;
+            } catch (_) {
+                if (metaEl) metaEl.textContent = 'Network error while loading books.';
+            }
+        }
+
+        async function loadBibleChapter() {
+            const selectEl = document.getElementById('readerBookSelect');
+            const chapterEl = document.getElementById('readerChapterInput');
+            const metaEl = document.getElementById('readerMeta');
+            const contentEl = document.getElementById('readerContent');
+            const labelEl = document.getElementById('readerCurrentChapter');
+            if (!selectEl || !chapterEl || !contentEl) return;
+
+            const book = selectEl.value;
+            let chapter = parseInt(chapterEl.value || '1', 10);
+            if (!Number.isFinite(chapter) || chapter < 1) chapter = 1;
+            chapterEl.value = String(chapter);
+
+            if (metaEl) metaEl.textContent = `Loading ${book} ${chapter}...`;
+            try {
+                const translation = bibleReaderState.translation || 'web';
+                const url = `/api/bible/chapter?book=${encodeURIComponent(book)}&chapter=${encodeURIComponent(chapter)}&translation=${encodeURIComponent(translation)}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    contentEl.innerHTML = `<div style="opacity: 0.7;">Unable to load chapter.</div>`;
+                    if (metaEl) metaEl.textContent = data.error || 'Unable to load chapter.';
+                    return;
+                }
+
+                const reference = data.reference || `${book} ${chapter}`;
+                if (labelEl) labelEl.textContent = `Chapter: ${reference}`;
+                renderBibleChapter(data);
+                if (metaEl) {
+                    const translationLabel = data.translation || data.translation_id || translation;
+                    metaEl.textContent = `${translationLabel} • ${data.verses ? data.verses.length : 0} verses`;
+                }
+                contentEl.scrollTop = 0;
+            } catch (_) {
+                contentEl.innerHTML = `<div style="opacity: 0.7;">Network error.</div>`;
+                if (metaEl) metaEl.textContent = 'Network error while loading chapter.';
+            }
+        }
+
+        function renderBibleChapter(data) {
+            const contentEl = document.getElementById('readerContent');
+            if (!contentEl) return;
+            const verses = Array.isArray(data.verses) ? data.verses : [];
+            if (!verses.length) {
+                contentEl.innerHTML = `<div style="opacity: 0.7;">No verses found.</div>`;
+                return;
+            }
+            contentEl.innerHTML = verses.map(v => `
+                <div class="reader-verse"><span>${v.verse}</span>${escapeHtml(v.text || '')}</div>
+            `).join('');
+        }
+
+        function prevBibleChapter() {
+            const chapterEl = document.getElementById('readerChapterInput');
+            if (!chapterEl) return;
+            let chapter = parseInt(chapterEl.value || '1', 10);
+            if (!Number.isFinite(chapter) || chapter <= 1) return;
+            chapter -= 1;
+            chapterEl.value = String(chapter);
+            loadBibleChapter();
+        }
+
+        function nextBibleChapter() {
+            const chapterEl = document.getElementById('readerChapterInput');
+            if (!chapterEl) return;
+            let chapter = parseInt(chapterEl.value || '1', 10);
+            if (!Number.isFinite(chapter)) chapter = 1;
+            chapter += 1;
+            chapterEl.value = String(chapter);
+            loadBibleChapter();
         }
 
         // Quick Filters for Discover
