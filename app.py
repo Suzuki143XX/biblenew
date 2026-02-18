@@ -1695,6 +1695,73 @@ def _openai_rank_books(query, books):
         logger.info(f"OpenAI book ranker unavailable: {e}")
         return None
 
+def _fallback_bible_picks(topic=None):
+    picks = [
+        {"reference": "John 1-3", "title": "The Prologue and New Birth", "reason": "Iconic opening on Jesus and salvation."},
+        {"reference": "Psalm 23", "title": "The Shepherd Psalm", "reason": "Comforting, widely loved passage."},
+        {"reference": "Romans 8", "title": "Life in the Spirit", "reason": "Hope, assurance, and victory."},
+        {"reference": "Matthew 5-7", "title": "Sermon on the Mount", "reason": "Core teachings of Jesus."},
+        {"reference": "Genesis 1-3", "title": "Creation and the Fall", "reason": "Foundational story of origins."},
+        {"reference": "Philippians 4", "title": "Peace and Joy", "reason": "Encouragement and practical faith."},
+        {"reference": "Isaiah 53", "title": "Suffering Servant", "reason": "Key prophecy about redemption."},
+        {"reference": "Luke 15", "title": "Lost and Found", "reason": "Parables of grace and mercy."},
+        {"reference": "Proverbs 3", "title": "Wisdom and Trust", "reason": "Guidance for daily life."},
+        {"reference": "Ephesians 2", "title": "Grace and New Life", "reason": "Salvation by grace."},
+    ]
+    return picks
+
+def _openai_bible_picks(topic):
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if not api_key:
+        return None
+
+    topic_text = topic.strip() if topic else "popular Bible selections"
+    system = (
+        "You are a Bible reading guide. Return JSON ONLY with key picks: "
+        "an array of objects with fields reference, title, reason. "
+        "Use well-known, popular Bible sections. "
+        "reference must look like 'John 1-3' or 'Romans 8'. "
+        "Provide 8-10 picks. Keep reason under 14 words."
+    )
+    user = f"Topic: {topic_text}"
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 220
+    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    try:
+        response = requests.post(OPENAI_API_URL, headers=headers, json=payload, timeout=20)
+        response.raise_for_status()
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        parsed = _extract_json(content) if content else None
+        if not parsed:
+            return None
+        raw_picks = parsed.get("picks")
+        if not isinstance(raw_picks, list):
+            return None
+
+        cleaned = []
+        for item in raw_picks:
+            if not isinstance(item, dict):
+                continue
+            ref = str(item.get("reference") or item.get("ref") or "").strip()
+            if not ref:
+                continue
+            title = str(item.get("title") or "").strip() or ref
+            reason = str(item.get("reason") or "").strip()
+            cleaned.append({"reference": ref, "title": title, "reason": reason})
+        return cleaned[:10]
+    except Exception as e:
+        logger.info(f"OpenAI bible picks unavailable: {e}")
+        return None
+
 @app.route('/api/books/search')
 def books_search():
     if 'user_id' not in session:
@@ -1825,6 +1892,17 @@ def books_content(book_id):
     except Exception as e:
         logger.error(f"Book content error: {e}")
         return jsonify({"error": "book_content_error"}), 500
+
+@app.route('/api/bible/picks')
+def bible_picks():
+    if 'user_id' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    topic = (request.args.get('topic') or '').strip()
+    picks = _openai_bible_picks(topic)
+    if not picks:
+        picks = _fallback_bible_picks(topic)
+    return jsonify({"topic": topic, "picks": picks})
 
 @app.route('/api/set_interval', methods=['POST'])
 def set_interval():
